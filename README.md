@@ -1,11 +1,89 @@
-<div align="center">
+# Ṣe Ṣe Wá - Handyman & Professional Marketplace
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Ṣe Ṣe Wá is a modern, standalone marketplace for finding and booking local handyman and professional services across Nigeria. Built with React, Tailwind CSS, and Firebase, it offers a secure and seamless experience for both customers and service providers.
 
-  <h1>Built with AI Studio</h2>
+## 🚀 Features
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+- **Service Discovery**: Browse professionals by category (Plumbing, Electrical, Carpentry, Mechanics, etc.).
+- **Smart Search**: Find pros by name, skill, or location.
+- **Nearby Search**: Use browser geolocation to find the closest service providers.
+- **Escrow Payments**: Secure transactions via Paystack integration. Funds are held in escrow until job completion.
+- **Dispute Resolution**: Admin-mediated dispute system for user and professional protection.
+- **Professional Verification**: ID document upload and admin vetting workflow for "Verified" badges.
+- **Real-time Chat**: Direct messaging between customers and handymen.
+- **Lead System**: Professionals can unlock job leads using a credit system.
+- **User Authentication**: Secure login via Google or Email/Password.
+- **Admin Dashboard**: Manage verifications, disputes, and marketplace settings.
+- **Responsive Design**: Optimized for mobile, tablet, and desktop.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## 🛠️ Tech Stack
 
-</div>
+- **Frontend**: React 18, Vite, Tailwind CSS
+- **Animations**: Motion (Framer Motion)
+- **Icons**: Lucide React
+- **Backend**: Firebase (Authentication, Firestore)
+- **Payments**: Paystack API
+- **State Management**: React Hooks (useState, useEffect, useContext)
+
+## 📦 Getting Started
+
+### Prerequisites
+
+- Node.js (v18 or higher)
+- npm or yarn
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/sesewa-app.git
+   cd sesewa-app
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Set up environment variables:
+   Create a `.env` file in the root directory based on `.env.example`:
+   ```bash
+   cp .env.example .env
+   ```
+   Fill in your Paystack and Firebase credentials.
+
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+## 🚢 Deployment
+
+### Firebase Hosting (Option 1 - Recommended)
+
+1.  **Install Firebase CLI:**
+    ```bash
+    npm install -g firebase-tools
+    ```
+
+2.  **Login:**
+    ```bash
+    firebase login
+    ```
+
+3.  **Build and deploy:**
+    ```bash
+    npm run build
+    firebase deploy
+    ```
+
+4.  **Connect Custom Domain:**
+    *   Go to the [Firebase Console](https://console.firebase.google.com/project/ai-studio-applet-webapp-5d01f/hosting/main).
+    *   Click **"Add Custom Domain"**.
+    *   Follow the DNS instructions provided by Firebase.
+
+### Vercel / Netlify
+
+## 📄 License
+
+This project is licensed under the MIT License.

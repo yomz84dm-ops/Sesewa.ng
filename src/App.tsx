@@ -1,0 +1,4377 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import * as React from 'react';
+import axios from 'axios';
+import { useState, useMemo, useEffect } from 'react';
+import { 
+  Search, 
+  MapPin, 
+  Wrench, 
+  Droplets, 
+  Zap, 
+  Paintbrush, 
+  Hammer, 
+  Phone, 
+  Star,
+  Filter,
+  ChevronRight,
+  Car,
+  Wind,
+  Scissors,
+  LayoutGrid,
+  Home,
+  Sparkles,
+  Trash2,
+  MessageCircle,
+  X,
+  CheckCircle2,
+  Image as ImageIcon,
+  Navigation,
+  Clock,
+  Briefcase,
+  Plus,
+  UserPlus,
+  User,
+  StarHalf,
+  CreditCard,
+  Smartphone,
+  ShieldCheck,
+  Heart,
+  Send,
+  LogIn,
+  LogOut,
+  AlertCircle,
+  AlertTriangle,
+  Upload,
+  Mail,
+  Lock,
+  Bell,
+  TrendingUp,
+  RotateCcw
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  signOut,
+  User as FirebaseUser,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail
+} from 'firebase/auth';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  addDoc, 
+  serverTimestamp, 
+  orderBy, 
+  doc, 
+  setDoc, 
+  getDoc,
+  updateDoc,
+  getDocFromServer,
+  Timestamp
+} from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage } from './firebase';
+
+import { Logo } from './components/Logo';
+
+// --- Error Handling ---
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string;
+    email?: string | null;
+    emailVerified?: boolean;
+    isAnonymous?: boolean;
+    tenantId?: string | null;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('ErrorBoundary caught an error', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let errorMessage = "Something went wrong.";
+      try {
+        if (this.state.error?.message) {
+          const parsed = JSON.parse(this.state.error.message);
+          if (parsed.error) errorMessage = parsed.error;
+        }
+      } catch (e) {
+        errorMessage = this.state.error?.message || errorMessage;
+      }
+
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+          <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle size={32} />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Oops!</h2>
+            <p className="text-slate-600 mb-6">{errorMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all"
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+/// --- Types ---
+interface Review {
+  id: string;
+  proId: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  date: string;
+}
+
+interface Message {
+  id: string;
+  chatId: string;
+  senderId: string;
+  text: string;
+  createdAt: any;
+}
+
+interface Chat {
+  id: string;
+  participants: string[];
+  lastMessage?: string;
+  lastMessageAt?: any;
+  updatedAt: any;
+  otherParticipantName?: string;
+}
+
+interface AppUser {
+  uid: string;
+  name: string;
+  email: string;
+  role: 'user' | 'handyman' | 'admin';
+  photoURL?: string;
+  phone?: string;
+  plan?: 'basic' | 'pro' | 'member';
+  credits?: number;
+  isVerifiedPending?: boolean;
+  verified?: boolean;
+  idDocumentUrl?: string;
+  createdAt?: any;
+}
+
+interface JobRequest {
+  id: string;
+  proId: string;
+  proName: string;
+  userUid: string;
+  userName: string;
+  userPhone?: string;
+  jobDescription: string;
+  status: 'pending' | 'responded' | 'completed' | 'cancelled';
+  paymentStatus?: 'none' | 'pending' | 'escrowed' | 'released' | 'refunded' | 'disputed';
+  amount?: number;
+  paystackReference?: string;
+  date: string;
+  unlockedBy?: string[]; // List of handyman UIDs who have unlocked this lead
+}
+
+interface Dispute {
+  id: string;
+  jobRequestId: string;
+  raisedBy: string;
+  reason: string;
+  status: 'open' | 'resolved' | 'refunded';
+  createdAt: any;
+  resolvedAt?: any;
+}
+
+interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'message' | 'job_status' | 'quote' | 'system';
+  relatedId?: string;
+  read: boolean;
+  createdAt: any;
+}
+
+interface Handyman {
+  id: string;
+  name: string;
+  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services';
+  location: string;
+  lat: number;
+  lng: number;
+  rating: number;
+  reviews: number;
+  phone: string;
+  whatsapp?: string;
+  experience: string;
+  experienceYears: number;
+  verified: boolean;
+  isFeatured?: boolean;
+  isOnline?: boolean;
+  description: string;
+  portfolio: string[];
+  profileImage?: string;
+  userId?: string;
+  availability?: 'Available' | 'Busy' | 'Away';
+  plan?: 'basic' | 'pro';
+}
+
+// --- Mock Data ---
+const INITIAL_HANDYMEN: Handyman[] = [
+  {
+    id: '1',
+    name: 'Chinedu Okoro',
+    category: 'Plumbing',
+    location: 'Lagos Island, Lagos',
+    lat: 6.4549,
+    lng: 3.4246,
+    rating: 4.8,
+    reviews: 24,
+    phone: '08012345678',
+    whatsapp: '2348012345678',
+    experience: '10 years',
+    experienceYears: 10,
+    verified: true,
+    isFeatured: true,
+    isOnline: true,
+    description: 'Specialist in modern bathroom fittings and industrial piping. Available for emergency leaks 24/7.',
+    portfolio: ['https://loremflickr.com/400/300/plumbing,pipes', 'https://loremflickr.com/400/300/plumber,tools'],
+    plan: 'pro'
+  },
+  {
+    id: '2',
+    name: 'Abubakar Musa',
+    category: 'Electrical',
+    location: 'Wuse II, Abuja',
+    lat: 9.0765,
+    lng: 7.4985,
+    rating: 4.5,
+    reviews: 18,
+    phone: '08087654321',
+    whatsapp: '2348087654321',
+    experience: '7 years',
+    experienceYears: 7,
+    verified: true,
+    isFeatured: true,
+    isOnline: false,
+    description: 'Certified electrician for home wiring, inverter installations, and generator maintenance.',
+    portfolio: ['https://loremflickr.com/400/300/electrician,wiring', 'https://loremflickr.com/400/300/electrical,tools'],
+    plan: 'pro'
+  },
+  {
+    id: '3',
+    name: 'Oluwaseun Adeyemi',
+    category: 'Carpentry',
+    location: 'Ibadan, Oyo',
+    lat: 7.3775,
+    lng: 3.9470,
+    rating: 4.9,
+    reviews: 32,
+    phone: '07011223344',
+    experience: '15 years',
+    experienceYears: 15,
+    verified: true,
+    isOnline: true,
+    description: 'Master craftsman for bespoke furniture, kitchen cabinets, and roofing.',
+    portfolio: ['https://loremflickr.com/400/300/carpentry,woodwork', 'https://loremflickr.com/400/300/carpenter,furniture'],
+    plan: 'basic'
+  },
+  {
+    id: '4',
+    name: 'Funke Akindele',
+    category: 'Painting',
+    location: 'Lekki Phase 1, Lagos',
+    lat: 6.4478,
+    lng: 3.4723,
+    rating: 4.7,
+    reviews: 15,
+    phone: '08122334455',
+    experience: '6 years',
+    experienceYears: 6,
+    verified: true,
+    isOnline: true,
+    description: 'Professional interior and exterior painting. Specialist in decorative finishes and wallpaper installation.',
+    portfolio: ['https://loremflickr.com/400/300/painting,wall', 'https://loremflickr.com/400/300/painter,brushes'],
+    plan: 'pro'
+  },
+  {
+    id: '5',
+    name: 'Emeka Nwosu',
+    category: 'General Repairs',
+    location: 'Independence Layout, Enugu',
+    lat: 6.4584,
+    lng: 7.5083,
+    rating: 4.4,
+    reviews: 12,
+    phone: '09011223344',
+    experience: '5 years',
+    experienceYears: 5,
+    verified: false,
+    isOnline: true,
+    description: 'Handyman for all your home maintenance needs. From door locks to minor masonry and tiling.',
+    portfolio: ['https://loremflickr.com/400/300/tools,repair', 'https://loremflickr.com/400/300/handyman,work'],
+    plan: 'basic'
+  },
+  {
+    id: '6',
+    name: 'Ibrahim Danjuma',
+    category: 'Mechanic',
+    location: 'Kano City, Kano',
+    lat: 12.0022,
+    lng: 8.5920,
+    rating: 4.6,
+    reviews: 29,
+    phone: '08033445566',
+    whatsapp: '2348033445566',
+    experience: '8 years',
+    experienceYears: 8,
+    verified: true,
+    isOnline: true,
+    description: 'Expert in Japanese and German engines. Computerized diagnostics available.',
+    portfolio: ['https://loremflickr.com/400/300/mechanic,engine', 'https://loremflickr.com/400/300/car,repair'],
+  },
+  {
+    id: '7',
+    name: 'Tunde Bakare',
+    category: 'AC Technician',
+    location: 'GRA Phase 2, Port Harcourt',
+    lat: 4.8156,
+    lng: 7.0498,
+    rating: 4.8,
+    reviews: 41,
+    phone: '08144556677',
+    experience: '9 years',
+    experienceYears: 9,
+    verified: true,
+    isOnline: true,
+    description: 'Specialist in split and central AC systems. Gas refilling, servicing, and installation.',
+    portfolio: ['https://loremflickr.com/400/300/airconditioner,repair', 'https://loremflickr.com/400/300/ac,technician'],
+  },
+  {
+    id: '8',
+    name: 'Amina Yusuf',
+    category: 'Tailor',
+    location: 'Barnawa, Kaduna',
+    lat: 10.5105,
+    lng: 7.4165,
+    rating: 4.9,
+    reviews: 53,
+    phone: '07055667788',
+    experience: '12 years',
+    experienceYears: 12,
+    verified: true,
+    isOnline: false,
+    description: 'Expert in traditional and corporate wears. Custom designs for weddings and special occasions.',
+    portfolio: ['https://loremflickr.com/400/300/tailor,sewing', 'https://loremflickr.com/400/300/fashion,fabric'],
+  },
+  {
+    id: '9',
+    name: 'Sunday Udoh',
+    category: 'Bricklayer',
+    location: 'Ewet Housing, Uyo',
+    lat: 5.0333,
+    lng: 7.9266,
+    rating: 4.5,
+    reviews: 21,
+    phone: '08066778899',
+    experience: '20 years',
+    experienceYears: 20,
+    verified: true,
+    isOnline: true,
+    description: 'Master bricklayer for building construction, fencing, and interlocking stones.',
+    portfolio: ['https://loremflickr.com/400/300/bricklayer,construction', 'https://loremflickr.com/400/300/brick,wall'],
+  },
+  {
+    id: '10',
+    name: 'Maryam Bello',
+    category: 'House Help',
+    location: 'Rayfield, Jos',
+    lat: 9.8965,
+    lng: 8.8583,
+    rating: 4.7,
+    reviews: 38,
+    phone: '09077889900',
+    experience: '6 years',
+    experienceYears: 6,
+    verified: true,
+    isOnline: true,
+    description: 'Reliable house help for laundry, cooking, and general home management. Vetted and trustworthy.',
+    portfolio: ['https://loremflickr.com/400/300/housekeeping,cooking', 'https://loremflickr.com/400/300/laundry,cleaning'],
+  },
+  {
+    id: '11',
+    name: 'Blessing Egbe',
+    category: 'Cleaning',
+    location: 'Victoria Island, Lagos',
+    lat: 6.4281,
+    lng: 3.4215,
+    rating: 4.7,
+    reviews: 64,
+    phone: '08033221100',
+    whatsapp: '2348033221100',
+    experience: '4 years',
+    experienceYears: 4,
+    verified: true,
+    isOnline: false,
+    description: 'Professional deep cleaning for homes and offices. Eco-friendly products used.',
+    portfolio: ['https://loremflickr.com/400/300/cleaning,janitor', 'https://loremflickr.com/400/300/vacuum,mop'],
+  },
+  {
+    id: '12',
+    name: 'Kayode Williams',
+    category: 'Auto Services',
+    location: 'Bodija, Ibadan',
+    lat: 7.4144,
+    lng: 3.9105,
+    rating: 4.6,
+    reviews: 19,
+    phone: '08188990011',
+    experience: '7 years',
+    experienceYears: 7,
+    verified: false,
+    isOnline: true,
+    description: 'Comprehensive auto services including wheel balancing, alignment, and brake repairs.',
+    portfolio: ['https://loremflickr.com/400/300/car,service', 'https://loremflickr.com/400/300/auto,repair'],
+    plan: 'pro'
+  },
+];
+
+interface PricingPlan {
+  id: string;
+  name: string;
+  price: string;
+  period: string;
+  features: string[];
+  recommended?: boolean;
+  buttonText: string;
+}
+
+const PRICING_PLANS: PricingPlan[] = [
+  {
+    id: 'basic',
+    name: 'Starter',
+    price: 'Free',
+    period: 'for first 2 leads',
+    features: [
+      'Standard Listing',
+      'Basic Profile',
+      '2 Welcome Credits',
+      'Pay-per-Lead after trial',
+      'Community Support'
+    ],
+    buttonText: 'Get Started'
+  },
+  {
+    id: 'credits-1',
+    name: 'Single Lead',
+    price: '₦500',
+    period: 'one-time',
+    features: [
+      '1 Credit',
+      'Unlock 1 Lead',
+      'No Expiry'
+    ],
+    buttonText: 'Buy 1 Credit'
+  },
+  {
+    id: 'credits-10',
+    name: 'Starter Pack',
+    price: '₦4,000',
+    period: 'one-time',
+    features: [
+      '10 Credits',
+      'Unlock 10 Leads',
+      'Save ₦1,000',
+      'No Expiry'
+    ],
+    buttonText: 'Buy 10 Credits'
+  },
+  {
+    id: 'credits-50',
+    name: 'Growth Pack',
+    price: '₦15,000',
+    period: 'one-time',
+    features: [
+      '50 Credits',
+      'Unlock 50 Leads',
+      'Save ₦10,000',
+      'Priority Support',
+      'No Expiry'
+    ],
+    buttonText: 'Buy 50 Credits'
+  },
+  {
+    id: 'pro',
+    name: 'Featured Pro',
+    price: '₦2,500',
+    period: 'per month',
+    features: [
+      'Featured Badge',
+      'Top of Search Results',
+      'Verified Status Badge',
+      'Priority Lead Notifications',
+      'Analytics Dashboard'
+    ],
+    recommended: true,
+    buttonText: 'Go Featured'
+  },
+  {
+    id: 'member',
+    name: 'Customer Member',
+    price: '₦1,000',
+    period: 'per month',
+    features: [
+      'Access Verified Pros Only',
+      'Priority Support',
+      'Community Guarantee',
+      'Exclusive Discounts',
+      'No Ads'
+    ],
+    buttonText: 'Join Community'
+  },
+  {
+    id: 'enterprise',
+    name: 'Agency',
+    price: '₦7,500',
+    period: 'per month',
+    features: [
+      'Up to 5 Team Members',
+      'Advanced SEO Optimization',
+      'Dedicated Account Manager',
+      'Custom Portfolio URL',
+      'Bulk SMS Marketing'
+    ],
+    buttonText: 'Contact Sales'
+  }
+];
+
+const CATEGORIES = [
+  { name: 'All', icon: Filter },
+  { name: 'Cleaning', icon: Sparkles },
+  { name: 'House Help', icon: Home },
+  { name: 'Auto Services', icon: Car },
+  { name: 'Plumbing', icon: Droplets },
+  { name: 'Electrical', icon: Zap },
+  { name: 'Carpentry', icon: Hammer },
+  { name: 'Painting', icon: Paintbrush },
+  { name: 'Mechanic', icon: Car },
+  { name: 'AC Technician', icon: Wind },
+  { name: 'Tailor', icon: Scissors },
+  { name: 'Bricklayer', icon: LayoutGrid },
+  { name: 'General Repairs', icon: Wrench },
+];
+
+// --- Helpers ---
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+// --- Components ---
+const StarRating = ({ rating, onRate, interactive = false }: { rating: number, onRate?: (r: number) => void, interactive?: boolean }) => {
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={!interactive}
+          onClick={() => onRate?.(star)}
+          className={`${interactive ? 'cursor-pointer hover:scale-110 transition-transform' : 'cursor-default'}`}
+        >
+          <Star
+            size={interactive ? 24 : 14}
+            className={`${
+              star <= rating 
+                ? 'text-amber-400 fill-amber-400' 
+                : 'text-slate-200'
+            }`}
+          />
+        </button>
+      ))}
+    </div>
+  );
+};
+
+const SimulatedCheckout = ({ plan, onClose, onComplete }: { plan: PricingPlan, onClose: () => void, onComplete: () => void }) => {
+  const [step, setStep] = useState<'options' | 'processing' | 'success'>('options');
+  const [method, setMethod] = useState<'card' | 'transfer' | 'ussd'>('card');
+
+  const handlePay = async () => {
+    setStep('processing');
+    
+    try {
+      if (auth.currentUser) {
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        
+        if (plan.id.startsWith('credits-')) {
+          const amount = parseInt(plan.id.split('-')[1]);
+          // We need the current credits from the user document
+          const userSnap = await getDoc(userRef);
+          const currentCredits = userSnap.data()?.credits || 0;
+          await updateDoc(userRef, {
+            credits: currentCredits + amount
+          });
+        } else {
+          await updateDoc(userRef, {
+            plan: plan.id
+          });
+        }
+      }
+      setStep('success');
+    } catch (error) {
+      console.error('Payment update error:', error);
+      setStep('options');
+      alert('Payment was successful, but we encountered an error updating your account. Please contact support.');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+        {step === 'options' && (
+          <div className="p-8">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Checkout</h3>
+                <p className="text-slate-500 text-sm">Secure payment via Paystack</p>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl mb-8 flex justify-between items-center">
+              <div>
+                <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">Plan</div>
+                <div className="font-bold text-slate-900">{plan.name}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-slate-400 uppercase font-bold tracking-wider">Amount</div>
+                <div className="font-bold text-blue-600">{plan.price}</div>
+              </div>
+            </div>
+
+            <div className="space-y-3 mb-8">
+              <button 
+                onClick={() => setMethod('card')}
+                className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${
+                  method === 'card' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200'
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${method === 'card' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                  <CreditCard size={20} />
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-sm">Pay with Card</div>
+                  <div className="text-xs text-slate-500">Visa, Mastercard, Verve</div>
+                </div>
+              </button>
+
+              <button 
+                onClick={() => setMethod('transfer')}
+                className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${
+                  method === 'transfer' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-slate-200'
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${method === 'transfer' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                  <Smartphone size={20} />
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-sm">Bank Transfer</div>
+                  <div className="text-xs text-slate-500">Fast and secure local transfer</div>
+                </div>
+              </button>
+            </div>
+
+            <button 
+              onClick={handlePay}
+              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+            >
+              Pay {plan.price}
+            </button>
+            
+            <div className="mt-6 flex items-center justify-center gap-2 text-slate-400 text-xs font-medium">
+              <ShieldCheck size={14} className="text-emerald-500" />
+              Secured by Paystack
+            </div>
+          </div>
+        )}
+
+        {step === 'processing' && (
+          <div className="p-12 text-center">
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+            <h3 className="text-xl font-bold mb-2">Processing Payment</h3>
+            <p className="text-slate-500">Please do not close this window...</p>
+          </div>
+        )}
+
+        {step === 'success' && (
+          <div className="p-12 text-center animate-in fade-in slide-in-from-bottom-4">
+            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 size={40} />
+            </div>
+            <h3 className="text-2xl font-bold mb-2">Payment Successful!</h3>
+            <p className="text-slate-500 mb-8">
+              Your subscription to <strong>{plan.name}</strong> is now active.
+            </p>
+            <button 
+              onClick={onComplete}
+              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all"
+            >
+              Continue to Dashboard
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const NotificationList = ({ 
+  notifications, 
+  onClose, 
+  onMarkRead,
+  setShowChatList,
+  setShowRequests
+}: { 
+  notifications: Notification[], 
+  onClose: () => void,
+  onMarkRead: (id: string) => void,
+  setShowChatList: (show: boolean) => void,
+  setShowRequests: (show: boolean) => void
+}) => {
+  const handleNotificationClick = (notif: Notification) => {
+    onMarkRead(notif.id);
+    onClose();
+    
+    if (notif.type === 'message') {
+      setShowChatList(true);
+      setShowRequests(false);
+    } else if (notif.type === 'job_status' || notif.type === 'quote') {
+      setShowRequests(true);
+      setShowChatList(false);
+    }
+  };
+
+  return (
+    <div className="w-[calc(100vw-2rem)] sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+      <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white">
+        <h3 className="font-bold text-slate-900">Notifications</h3>
+        <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="max-h-96 overflow-y-auto">
+        {notifications.length === 0 ? (
+          <div className="p-8 text-center">
+            <Bell size={32} className="mx-auto text-slate-200 mb-2" />
+            <p className="text-slate-400 text-sm">No notifications yet.</p>
+          </div>
+        ) : (
+          notifications.map((n) => (
+            <div 
+              key={n.id} 
+              className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer ${!n.read ? 'bg-blue-50/50' : ''}`}
+              onClick={() => handleNotificationClick(n)}
+            >
+              <div className="flex gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  n.type === 'message' ? 'bg-blue-100 text-blue-600' :
+                  n.type === 'job_status' ? 'bg-green-100 text-green-600' :
+                  'bg-purple-100 text-purple-600'
+                }`}>
+                  {n.type === 'message' ? <MessageCircle size={14} /> :
+                   n.type === 'job_status' ? <CheckCircle2 size={14} /> :
+                   <Briefcase size={14} />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-900">{n.title}</p>
+                  <p className="text-xs text-slate-600 line-clamp-2">{n.message}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {n.createdAt?.toDate ? n.createdAt.toDate().toLocaleString() : 'Just now'}
+                  </p>
+                </div>
+                {!n.read && <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5 flex-shrink-0" />}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ChatWindow = ({ 
+  chat, 
+  currentUser, 
+  onClose,
+  createNotification
+}: { 
+  chat: Chat, 
+  currentUser: AppUser, 
+  onClose: () => void,
+  createNotification: (userId: string, title: string, message: string, type: 'message' | 'job_status' | 'quote', relatedId?: string) => Promise<void>
+}) => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const q = query(
+      collection(db, 'chats', chat.id, 'messages'),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Message[];
+      setMessages(msgs);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, `chats/${chat.id}/messages`);
+    });
+
+    return () => unsubscribe();
+  }, [chat.id]);
+
+  React.useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+
+    const text = newMessage;
+    setNewMessage('');
+
+    try {
+      const msgData = {
+        chatId: chat.id,
+        senderId: currentUser.uid,
+        text,
+        createdAt: serverTimestamp()
+      };
+      await addDoc(collection(db, 'chats', chat.id, 'messages'), msgData);
+      await updateDoc(doc(db, 'chats', chat.id), {
+        lastMessage: text,
+        lastMessageAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      const otherId = chat.participants.find(p => p !== currentUser.uid);
+      if (otherId) {
+        await createNotification(
+          otherId,
+          `New message from ${currentUser.name}`,
+          text.length > 50 ? text.substring(0, 47) + '...' : text,
+          'message',
+          chat.id
+        );
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `chats/${chat.id}/messages`);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-white">
+      <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 font-bold">
+            {chat.otherParticipantName?.charAt(0) || '?'}
+          </div>
+          <div>
+            <h4 className="font-bold text-slate-900">{chat.otherParticipantName}</h4>
+            <p className="text-[10px] text-green-500 font-bold uppercase tracking-wider">Active Chat</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+          <X size={20} />
+        </button>
+      </div>
+
+      <div 
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50"
+      >
+        {messages.map((msg) => (
+          <div 
+            key={msg.id}
+            className={`flex ${msg.senderId === currentUser.uid ? 'justify-end' : 'justify-start'}`}
+          >
+            <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${
+              msg.senderId === currentUser.uid 
+              ? 'bg-blue-600 text-white rounded-tr-none' 
+              : 'bg-white text-slate-700 border border-slate-100 rounded-tl-none shadow-sm'
+            }`}>
+              {msg.text}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-100 bg-white">
+        <div className="flex gap-2">
+          <input 
+            type="text"
+            placeholder="Type a message..."
+            className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+          />
+          <button 
+            type="submit"
+            className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+export default function App() {
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChat, setActiveChat] = useState<Chat | null>(null);
+  const [showChatList, setShowChatList] = useState(false);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [selectedPro, setSelectedPro] = useState<Handyman | null>(null);
+  const [showRegForm, setShowRegForm] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
+  const [showUserProfileModal, setShowUserProfileModal] = useState(false);
+  const [verificationFile, setVerificationFile] = useState<File | null>(null);
+  const [showPricing, setShowPricing] = useState(false);
+  const [showAdminDashboard, setShowAdminDashboard] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [showOutOfCredits, setShowOutOfCredits] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<PricingPlan | null>(null);
+  const [showOnlyOnline, setShowOnlyOnline] = useState(false);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [useRadiusFilter, setUseRadiusFilter] = useState(false);
+  const RADIUS_MILES = 10;
+  const RADIUS_KM = RADIUS_MILES * 1.60934;
+  const [requestingQuotePro, setRequestingQuotePro] = useState<Handyman | null>(null);
+  const [minRating, setMinRating] = useState(0);
+  const [minExperience, setMinExperience] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | 'reset'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [pendingVerifications, setPendingVerifications] = useState<AppUser[]>([]);
+  const isAdmin = currentUser?.email === 'yomz84.dm@gmail.com' || currentUser?.role === 'admin';
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+
+  // Local Storage Persistence
+  const [handymen, setHandymen] = useState<Handyman[]>(INITIAL_HANDYMEN);
+
+  const myProProfile = useMemo(() => {
+    if (!currentUser) return null;
+    return handymen.find(h => h.userId === currentUser.uid);
+  }, [currentUser, handymen]);
+
+  // Firebase Auth & User Data
+  React.useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. The client is offline.");
+        }
+      }
+    }
+    testConnection();
+
+    // Fetch all handymen from Firestore
+    const handymenQuery = query(collection(db, 'handymen'), orderBy('rating', 'desc'));
+    const unsubscribeHandymen = onSnapshot(handymenQuery, async (snapshot) => {
+      if (snapshot.empty) {
+        // Seed initial data if collection is empty
+        for (const pro of INITIAL_HANDYMEN) {
+          await setDoc(doc(db, 'handymen', pro.id), pro);
+        }
+        return;
+      }
+      
+      const dbHandymen = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Handyman[];
+      
+      setHandymen(dbHandymen);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'handymen');
+    });
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Use onSnapshot for real-time user data updates (credits, plan, etc.)
+        const unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), async (userDoc) => {
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as AppUser;
+            // Ensure admin email always has admin role
+            if (user.email === 'yomz84.dm@gmail.com' && userData.role !== 'admin') {
+              userData.role = 'admin';
+              await updateDoc(doc(db, 'users', user.uid), { role: 'admin' });
+            }
+            setCurrentUser(userData);
+          } else {
+            const newUser: AppUser = {
+              uid: user.uid,
+              name: user.displayName || 'Anonymous',
+              email: user.email || '',
+              role: user.email === 'yomz84.dm@gmail.com' ? 'admin' : 'user',
+              photoURL: user.photoURL || '',
+              credits: 2
+            };
+            await setDoc(doc(db, 'users', user.uid), {
+              ...newUser,
+              createdAt: serverTimestamp()
+            });
+            setCurrentUser(newUser);
+          }
+        });
+
+        // Reset view to home page and all filters upon login
+        setShowPricing(false);
+        setShowRequests(false);
+        setShowChatList(false);
+        setShowAdminDashboard(false);
+        setSelectedCategory('All');
+        setSearchQuery('');
+        setMinRating(0);
+        setMinExperience(0);
+        setShowOnlyOnline(false);
+        setShowFavoritesOnly(false);
+        setUseRadiusFilter(false);
+
+        return () => unsubscribeUser();
+      } else {
+        setCurrentUser(null);
+      }
+      setIsAuthReady(true);
+    });
+
+    return () => {
+      unsubscribeHandymen();
+      unsubscribeAuth();
+    };
+  }, []);
+
+  // Fetch disputes for admin
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      setDisputes([]);
+      return;
+    }
+
+    const disputesQuery = query(collection(db, 'disputes'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(disputesQuery, (snapshot) => {
+      const dbDisputes = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Dispute[];
+      setDisputes(dbDisputes);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'disputes');
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  // Fetch pending verifications for admin
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      setPendingVerifications([]);
+      return;
+    }
+
+    const pendingQuery = query(
+      collection(db, 'users'),
+      where('isVerifiedPending', '==', true)
+    );
+    const unsubscribe = onSnapshot(pendingQuery, (snapshot) => {
+      const pending = snapshot.docs.map(doc => doc.data() as AppUser);
+      setPendingVerifications(pending);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'users');
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  // Firebase Chats
+  React.useEffect(() => {
+    if (!currentUser) {
+      setChats([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', currentUser.uid),
+      orderBy('updatedAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const chatList = await Promise.all(snapshot.docs.map(async (chatDoc) => {
+        const data = chatDoc.data();
+        const otherId = data.participants.find((p: string) => p !== currentUser.uid);
+        let otherName = 'Unknown';
+        
+        if (otherId) {
+          const otherDoc = await getDoc(doc(db, 'users', otherId));
+          if (otherDoc.exists()) {
+            otherName = otherDoc.data().name;
+          }
+        }
+
+        return {
+          id: chatDoc.id,
+          ...data,
+          otherParticipantName: otherName
+        } as Chat;
+      }));
+      setChats(chatList);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'chats');
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  // Firebase Notifications
+  React.useEffect(() => {
+    if (!currentUser) {
+      setNotifications([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', currentUser.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const notificationList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Notification[];
+      setNotifications(notificationList);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'notifications');
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  const createNotification = async (userId: string, title: string, message: string, type: 'message' | 'job_status' | 'quote' | 'system', relatedId?: string) => {
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId,
+        title,
+        message,
+        type,
+        relatedId,
+        read: false,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'notifications');
+    }
+  };
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      await updateDoc(doc(db, 'notifications', notificationId), {
+        read: true
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'notifications');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
+      setShowAuthModal(false);
+    } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user') {
+        console.log('User cancelled login.');
+      } else {
+        console.error('Login Error:', error);
+        setAuthError(error.message);
+      }
+    }
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(authEmail)) {
+      setAuthError('Please enter a valid email address.');
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      if (authMode === 'login') {
+        await signInWithEmailAndPassword(auth, authEmail, authPassword);
+        setShowAuthModal(false);
+      } else if (authMode === 'signup') {
+        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+        setShowAuthModal(false);
+      } else if (authMode === 'reset') {
+        await sendPasswordResetEmail(auth, authEmail);
+        setResetSent(true);
+      }
+    } catch (error: any) {
+      console.error('Auth Error:', error);
+      setAuthError(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogin = () => {
+    setAuthMode('login');
+    setAuthEmail('');
+    setAuthPassword('');
+    setAuthError(null);
+    setResetSent(false);
+    setShowAuthModal(true);
+  };
+
+  const handleLogout = () => signOut(auth);
+
+  const startChat = async (otherUserId: string, otherUserName: string) => {
+    if (!currentUser) {
+      handleLogin();
+      return;
+    }
+
+    // Check if chat already exists
+    const existingChat = chats.find(c => c.participants.includes(otherUserId));
+    if (existingChat) {
+      setActiveChat(existingChat);
+      setShowChatList(true);
+      setSelectedPro(null);
+      return;
+    }
+
+    // Create new chat
+    try {
+      const chatData = {
+        participants: [currentUser.uid, otherUserId],
+        updatedAt: serverTimestamp(),
+      };
+      const docRef = await addDoc(collection(db, 'chats'), chatData);
+      
+      // Ensure the other user exists in our users collection for the chat to work
+      const otherDoc = await getDoc(doc(db, 'users', otherUserId));
+      if (!otherDoc.exists()) {
+        await setDoc(doc(db, 'users', otherUserId), {
+          uid: otherUserId,
+          name: otherUserName,
+          email: `${otherUserId}@local`,
+          role: 'user',
+          createdAt: serverTimestamp()
+        });
+      }
+
+      const newChat: Chat = {
+        id: docRef.id,
+        ...chatData,
+        otherParticipantName: otherUserName
+      };
+      setActiveChat(newChat);
+      setShowChatList(true);
+      setSelectedPro(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'chats');
+    }
+  };
+  
+  // Local Storage Persistence
+  const [reviews, setReviews] = useState<Review[]>(() => {
+    const saved = localStorage.getItem('se_se_wa_reviews');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [jobRequests, setJobRequests] = useState<JobRequest[]>([]);
+
+  // Firebase Job Requests
+  React.useEffect(() => {
+    if (!currentUser) {
+      setJobRequests([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'jobRequests'),
+      where(currentUser.role === 'handyman' ? 'proId' : 'userName', '==', currentUser.role === 'handyman' ? currentUser.uid : currentUser.name),
+      orderBy('date', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const requestList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate ? doc.data().date.toDate().toLocaleDateString() : doc.data().date
+      })) as JobRequest[];
+      setJobRequests(requestList);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'jobRequests');
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    const saved = localStorage.getItem('se_se_wa_favorites');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [newReviewRating, setNewReviewRating] = useState(5);
+  const [newReviewComment, setNewReviewComment] = useState('');
+  const [showBrandPreview, setShowBrandPreview] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    localStorage.setItem('se_se_wa_pros_v3', JSON.stringify(handymen));
+  }, [handymen]);
+
+  React.useEffect(() => {
+    localStorage.setItem('se_se_wa_reviews', JSON.stringify(reviews));
+  }, [reviews]);
+
+  React.useEffect(() => {
+    localStorage.setItem('se_se_wa_jobs', JSON.stringify(jobRequests));
+  }, [jobRequests]);
+
+  React.useEffect(() => {
+    localStorage.setItem('se_se_wa_favorites', JSON.stringify(favorites));
+  }, [favorites]);
+
+  const handleGetLocation = () => {
+    setLocationError(null);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        (err) => {
+          console.error(err);
+          setLocationError("Unable to get location. Please check your permissions.");
+        }
+      );
+    } else {
+      setLocationError("Geolocation is not supported by your browser.");
+    }
+  };
+
+  const toggleFavorite = (id: string) => {
+    setFavorites(prev => 
+      prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
+    );
+  };
+
+  const filteredHandymen = useMemo(() => {
+    let list = handymen.filter((h) => {
+      const name = h.name || '';
+      const location = h.location || '';
+      const category = h.category || '';
+      
+      const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            location.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = selectedCategory === 'All' || category === selectedCategory;
+      const matchesOnline = !showOnlyOnline || h.isOnline;
+      const matchesFavorites = !showFavoritesOnly || favorites.includes(h.id);
+      const matchesRating = (h.rating || 0) >= minRating;
+      const matchesExperience = (h.experienceYears || 0) >= minExperience;
+      
+      let matchesRadius = true;
+      if (userLocation && useRadiusFilter) {
+        const dist = calculateDistance(userLocation.lat, userLocation.lng, h.lat || 0, h.lng || 0);
+        matchesRadius = dist <= RADIUS_KM;
+      }
+
+      return matchesSearch && matchesCategory && matchesOnline && matchesRadius && matchesFavorites && matchesRating && matchesExperience;
+    });
+
+    if (userLocation) {
+      list = [...list].sort((a, b) => {
+        // 1. Prioritize Pro Plan
+        if (a.plan === 'pro' && b.plan !== 'pro') return -1;
+        if (a.plan !== 'pro' && b.plan === 'pro') return 1;
+
+        // 2. Prioritize Featured
+        if (a.isFeatured && !b.isFeatured) return -1;
+        if (!a.isFeatured && b.isFeatured) return 1;
+
+        const distA = calculateDistance(userLocation.lat, userLocation.lng, a.lat, a.lng);
+        const distB = calculateDistance(userLocation.lat, userLocation.lng, b.lat, b.lng);
+        return distA - distB;
+      });
+    } else {
+      // Default sort: Pro first, then Featured
+      list = [...list].sort((a, b) => {
+        if (a.plan === 'pro' && b.plan !== 'pro') return -1;
+        if (a.plan !== 'pro' && b.plan === 'pro') return 1;
+        if (a.isFeatured && !b.isFeatured) return -1;
+        if (!a.isFeatured && b.isFeatured) return 1;
+        return 0;
+      });
+    }
+
+    return list;
+  }, [searchQuery, selectedCategory, handymen, userLocation, showOnlyOnline, showFavoritesOnly, useRadiusFilter, favorites, minRating, minExperience]);
+
+  const handleAddPro = async (newPro: Omit<Handyman, 'id' | 'rating' | 'reviews' | 'verified' | 'portfolio' | 'experienceYears' | 'userId' | 'availability'> & { portfolio?: string[], experienceYears?: number }) => {
+    setIsRegistering(true);
+    try {
+      let profileImageUrl = '';
+      if (profileImageFile) {
+        const storageRef = ref(storage, `profiles/${Date.now()}_${profileImageFile.name}`);
+        const snapshot = await uploadBytes(storageRef, profileImageFile);
+        profileImageUrl = await getDownloadURL(snapshot.ref);
+      }
+
+      const pro: Handyman = {
+        ...newPro,
+        id: Date.now().toString(),
+        rating: 0,
+        reviews: 0,
+        verified: false,
+        portfolio: newPro.portfolio || [],
+        experienceYears: newPro.experienceYears || parseInt(newPro.experience.split(' ')[0]) || 0,
+        profileImage: profileImageUrl || undefined,
+        userId: currentUser?.uid,
+        availability: 'Available',
+        plan: selectedPlan?.id as 'basic' | 'pro' || 'basic'
+      };
+
+      // Save to Firestore
+      await setDoc(doc(db, 'handymen', pro.id), pro);
+
+      // Update user document with plan, role, and initial credits
+      if (currentUser) {
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          role: 'handyman',
+          plan: selectedPlan?.id || 'basic',
+          credits: Math.max(currentUser.credits || 0, 2) // Ensure at least 2 welcome credits
+        });
+      }
+      // No need to setHandymen manually as onSnapshot will handle it
+      setShowRegForm(false);
+      setProfileImageFile(null);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000);
+    } catch (error) {
+      console.error("Error registering handyman:", error);
+      alert("Failed to register. Please try again.");
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const handleUpdatePro = async (updatedData: Partial<Handyman>) => {
+    if (!myProProfile) return;
+    setIsUpdating(true);
+    try {
+      let profileImageUrl = updatedData.profileImage;
+      if (profileImageFile) {
+        const storageRef = ref(storage, `profiles/${Date.now()}_${profileImageFile.name}`);
+        const snapshot = await uploadBytes(storageRef, profileImageFile);
+        profileImageUrl = await getDownloadURL(snapshot.ref);
+      }
+
+      const finalPro = {
+        ...myProProfile,
+        ...updatedData,
+        profileImage: profileImageUrl,
+        experienceYears: updatedData.experience ? parseInt(updatedData.experience.split(' ')[0]) || myProProfile.experienceYears : myProProfile.experienceYears
+      };
+
+      await setDoc(doc(db, 'handymen', myProProfile.id), finalPro, { merge: true });
+      
+      setShowEditProfile(false);
+      setProfileImageFile(null);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      alert("Failed to update profile. Please try again.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const toggleVerification = async (proId: string) => {
+    const pro = handymen.find(h => h.id === proId);
+    if (!pro) return;
+
+    try {
+      await setDoc(doc(db, 'handymen', proId), {
+        verified: !pro.verified
+      }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `handymen/${proId}`);
+    }
+  };
+
+  const handleAddReview = (proId: string, rating: number, comment: string) => {
+    const newReview: Review = {
+      id: Date.now().toString(),
+      proId,
+      userName: 'User ' + Math.floor(Math.random() * 1000),
+      rating,
+      comment,
+      date: new Date().toLocaleDateString()
+    };
+    setReviews([newReview, ...reviews]);
+    
+    // Update pro rating (simulated)
+    setHandymen(prev => prev.map(p => {
+      if (p.id === proId) {
+        const newTotalReviews = p.reviews + 1;
+        const newRating = ((p.rating * p.reviews) + rating) / newTotalReviews;
+        return { ...p, reviews: newTotalReviews, rating: Number(newRating.toFixed(1)) };
+      }
+      return p;
+    }));
+  };
+
+  const handleUnlockLead = async (requestId: string) => {
+    if (!currentUser || currentUser.role !== 'handyman') return;
+    
+    const currentCredits = currentUser.credits || 0;
+    if (currentCredits < 1) {
+      setShowOutOfCredits(true);
+      return;
+    }
+
+    try {
+      const requestRef = doc(db, 'jobRequests', requestId);
+      const requestDoc = await getDoc(requestRef);
+      
+      if (requestDoc.exists()) {
+        const data = requestDoc.data() as JobRequest;
+        const unlockedBy = data.unlockedBy || [];
+        
+        if (!unlockedBy.includes(currentUser.uid)) {
+          await updateDoc(requestRef, {
+            unlockedBy: [...unlockedBy, currentUser.uid]
+          });
+          
+          // Deduct credit
+          await updateDoc(doc(db, 'users', currentUser.uid), {
+            credits: currentCredits - 1
+          });
+          
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 3000);
+        }
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'jobRequests');
+    }
+  };
+
+  const handleApproveVerification = async (userId: string) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), {
+        isVerifiedPending: false,
+        verified: true
+      });
+      
+      // Also update the handyman profile if it exists
+      const pro = handymen.find(h => h.userId === userId);
+      if (pro) {
+        await setDoc(doc(db, 'handymen', pro.id), {
+          verified: true
+        }, { merge: true });
+      }
+
+      // Create notification for the user
+      await createNotification(
+        userId,
+        'Verification Approved!',
+        'Your professional profile has been verified. You now have the verified badge!',
+        'system',
+        ''
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    }
+  };
+
+  const handleRejectVerification = async (userId: string) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), {
+        isVerifiedPending: false,
+        verified: false
+      });
+
+      // Create notification for the user
+      await createNotification(
+        userId,
+        'Verification Update',
+        'Your verification request was not approved at this time. Please ensure your profile is complete.',
+        'system',
+        ''
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    }
+  };
+
+  // Check for Paystack callback
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const reference = urlParams.get('reference');
+    if (reference && jobRequests.length > 0) {
+      const job = jobRequests.find(j => j.paystackReference === reference);
+      if (job && job.paymentStatus === 'pending') {
+        handleVerifyPayment(reference, job.id);
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, [jobRequests]);
+
+  const handleApplyVerification = async (file: File) => {
+    if (!currentUser) return;
+    setIsRegistering(true);
+    try {
+      const storageRef = ref(storage, `verifications/${currentUser.uid}_${Date.now()}_${file.name}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const idDocumentUrl = await getDownloadURL(snapshot.ref);
+
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        isVerifiedPending: true,
+        idDocumentUrl
+      });
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000);
+      alert("Verification application submitted! We will review your ID and documents within 48 hours.");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'users');
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const handleRaiseDispute = async (jobRequestId: string, reason: string) => {
+    if (!currentUser) return;
+    try {
+      const dispute: Dispute = {
+        id: Date.now().toString(),
+        jobRequestId,
+        raisedBy: currentUser.uid,
+        reason,
+        status: 'open',
+        createdAt: serverTimestamp()
+      };
+      await setDoc(doc(db, 'disputes', dispute.id), dispute);
+      
+      await updateDoc(doc(db, 'jobRequests', jobRequestId), {
+        paymentStatus: 'disputed'
+      });
+
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000);
+      setShowDisputeModal(null);
+      alert("Dispute raised. Our admin team will review this shortly.");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'disputes');
+    }
+  };
+
+  const handleInitializePayment = async (jobRequest: JobRequest, amount: number) => {
+    if (!currentUser) return;
+    try {
+      const response = await axios.post('/api/paystack/initialize', {
+        email: currentUser.email,
+        amount,
+        metadata: {
+          jobRequestId: jobRequest.id,
+          userId: currentUser.uid
+        }
+      });
+      
+      if (response.data.status) {
+        window.open(response.data.data.authorization_url, '_blank');
+        
+        await updateDoc(doc(db, 'jobRequests', jobRequest.id), {
+          paystackReference: response.data.data.reference,
+          paymentStatus: 'pending',
+          amount
+        });
+        setShowPaymentModal(null);
+      }
+    } catch (error) {
+      console.error("Payment initialization failed:", error);
+      alert("Failed to start payment process.");
+    }
+  };
+
+  const handleVerifyPayment = async (reference: string, jobRequestId: string) => {
+    try {
+      const response = await axios.get(`/api/paystack/verify/${reference}`);
+      if (response.data.status && response.data.data.status === 'success') {
+        await updateDoc(doc(db, 'jobRequests', jobRequestId), {
+          paymentStatus: 'escrowed'
+        });
+        alert("Payment successful! Funds are now held in escrow.");
+      }
+    } catch (error) {
+      console.error("Payment verification failed:", error);
+    }
+  };
+
+  const handleReleaseFunds = async (jobRequestId: string) => {
+    try {
+      await updateDoc(doc(db, 'jobRequests', jobRequestId), {
+        paymentStatus: 'released',
+        status: 'completed'
+      });
+      alert("Funds released to the professional!");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'jobRequests');
+    }
+  };
+
+  const handleResolveDispute = async (disputeId: string, resolution: 'resolved' | 'refunded') => {
+    try {
+      const dispute = disputes.find(d => d.id === disputeId);
+      if (!dispute) return;
+
+      await updateDoc(doc(db, 'disputes', disputeId), {
+        status: resolution,
+        resolvedAt: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, 'jobRequests', dispute.jobRequestId), {
+        paymentStatus: resolution === 'refunded' ? 'refunded' : 'released'
+      });
+
+      alert(`Dispute ${resolution === 'refunded' ? 'refunded' : 'resolved'}.`);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'disputes');
+    }
+  };
+
+  const handleBuyCredits = async (amount: number) => {
+    if (!currentUser) return;
+    
+    // For credit packs, we also want to show the checkout modal
+    const creditPackPlan: PricingPlan = {
+      id: `credits-${amount}`,
+      name: `${amount} Credits Pack`,
+      price: amount === 5 ? '₦500' : amount === 15 ? '₦1,200' : '₦3,500',
+      period: 'one-time',
+      features: [`${amount} Lead Credits`, 'Instant Activation', 'No Expiry'],
+      buttonText: 'Buy Now'
+    };
+    
+    setSelectedPlan(creditPackPlan);
+    setShowCheckout(true);
+  };
+
+  const [showDisputeModal, setShowDisputeModal] = useState<JobRequest | null>(null);
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [showPaymentModal, setShowPaymentModal] = useState<JobRequest | null>(null);
+
+  const handleUpdateUserProfile = async (data: { name: string, phone: string }) => {
+    if (!currentUser) return;
+    try {
+      await updateDoc(doc(db, 'users', currentUser.uid), data);
+      setShowUserProfileModal(false);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'users');
+    }
+  };
+
+  const handleGoHome = () => {
+    setShowPricing(false);
+    setShowRequests(false);
+    setShowChatList(false);
+    setShowAdminDashboard(false);
+    setSelectedPro(null);
+    setSelectedCategory('All');
+    setSearchQuery('');
+    setMinRating(0);
+    setMinExperience(0);
+    setShowOnlyOnline(false);
+    setShowFavoritesOnly(false);
+    setUseRadiusFilter(false);
+    setShowEditProfile(false);
+    setShowRegForm(false);
+    setShowAuthModal(false);
+    setRequestingQuotePro(null);
+    setShowUserProfileModal(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRequestQuote = async (formData: { name: string, description: string }) => {
+    if (!requestingQuotePro) return;
+
+    try {
+      const newRequestData = {
+        proId: requestingQuotePro.id,
+        proName: requestingQuotePro.name,
+        userUid: currentUser?.uid || '',
+        userName: formData.name,
+        userPhone: currentUser?.phone || '',
+        jobDescription: formData.description,
+        status: 'pending',
+        date: serverTimestamp(),
+        unlockedBy: []
+      };
+
+      const docRef = await addDoc(collection(db, 'jobRequests'), newRequestData);
+
+      // Notify the handyman
+      if (requestingQuotePro.userId) {
+        await createNotification(
+          requestingQuotePro.userId,
+          'New Quote Request',
+          `${formData.name} requested a quote for: ${formData.description.substring(0, 30)}...`,
+          'quote',
+          docRef.id
+        );
+      }
+
+      setRequestingQuotePro(null);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000);
+
+      // Communication is now forced to the app, so we don't open WhatsApp anymore
+      // alert("Quote request sent! You can now chat with the professional in the Messages tab.");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'jobRequests');
+    }
+  };
+
+  const handleUpdateJobStatus = async (req: JobRequest, newStatus: 'pending' | 'responded' | 'completed') => {
+    try {
+      await updateDoc(doc(db, 'jobRequests', req.id), { status: newStatus });
+      
+      // Notify the user who made the request
+      if (req.userUid) {
+        await createNotification(
+          req.userUid,
+          'Job Status Updated',
+          `Your request for ${req.proName} is now ${newStatus}.`,
+          'job_status',
+          req.id
+        );
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'jobRequests');
+    }
+  };
+
+  return (
+    <ErrorBoundary>
+      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans overflow-x-hidden">
+      {/* Success Message */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-green-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2"
+          >
+            <CheckCircle2 size={20} />
+            Registration Successful!
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Out of Credits Modal */}
+      <AnimatePresence>
+        {showOutOfCredits && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 overflow-y-auto flex flex-col items-center text-center">
+              <div className="w-20 h-20 bg-amber-50 rounded-3xl flex items-center justify-center text-amber-500 mb-6">
+                <AlertTriangle size={40} />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 mb-2">Credits Exhausted</h3>
+              <p className="text-slate-500 mb-8">
+                You've used your welcome credits. To continue unlocking high-value leads and growing your business, please top up your account.
+              </p>
+              
+              <div className="grid grid-cols-1 gap-3 w-full mb-6">
+                <button 
+                  onClick={() => {
+                    setShowOutOfCredits(false);
+                    handleBuyCredits(1);
+                  }}
+                  className="flex items-center justify-between p-4 bg-blue-50 border border-blue-100 rounded-2xl hover:bg-blue-100 transition-all group"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-blue-900">Single Lead</div>
+                    <div className="text-xs text-blue-600">₦500 per lead</div>
+                  </div>
+                  <ChevronRight size={20} className="text-blue-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    setShowOutOfCredits(false);
+                    handleBuyCredits(5);
+                  }}
+                  className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-slate-100 transition-all group"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-slate-900">Starter Pack (5 Leads)</div>
+                    <div className="text-xs text-slate-500">₦2,000 (Save ₦500)</div>
+                  </div>
+                  <ChevronRight size={20} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
+              
+              <div className="flex flex-col gap-3 w-full">
+                <button 
+                  onClick={() => {
+                    setShowOutOfCredits(false);
+                    setShowPricing(true);
+                  }}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20"
+                >
+                  View All Plans
+                </button>
+                <button 
+                  onClick={() => setShowOutOfCredits(false)}
+                  className="w-full py-4 text-slate-400 font-bold hover:text-slate-600 transition-colors"
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </div>
+          </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Brand Preview Modal */}
+      <AnimatePresence>
+        {showBrandPreview && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowBrandPreview(false)}
+              className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-[2rem] shadow-2xl p-6 md:p-12 flex flex-col items-center text-center"
+            >
+              <button 
+                onClick={() => setShowBrandPreview(false)}
+                className="absolute top-4 right-4 md:top-6 md:right-6 p-2 rounded-full hover:bg-slate-100 transition-colors bg-white/80 backdrop-blur-sm z-10"
+              >
+                <X size={24} />
+              </button>
+              
+              <div className="mb-6 md:mb-8 p-6 md:p-8 bg-slate-50 rounded-[2rem] md:rounded-[3rem] w-full flex justify-center">
+                <Logo className="w-[200px] h-[200px] md:w-[300px] md:h-[300px]" />
+              </div>
+              
+              <h2 className="text-3xl md:text-4xl font-black tracking-tighter text-slate-900 mb-8">Ṣe Ṣe Wá</h2>
+              
+              <div className="grid grid-cols-2 gap-4 w-full">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-2">Primary Color</p>
+                  <div className="h-12 w-full rounded-lg bg-gradient-to-b from-blue-400 to-blue-600" />
+                </div>
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <p className="text-xs font-bold text-slate-400 uppercase mb-2">Accent Color</p>
+                  <div className="h-12 w-full rounded-lg bg-slate-900" />
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setShowBrandPreview(false)}
+                className="mt-12 px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all"
+              >
+                Back to App
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 w-full">
+        <div className="max-w-6xl mx-auto px-2 sm:px-4 py-1 flex items-center justify-between">
+          <div 
+            className="flex items-center cursor-pointer shrink-0" 
+            onClick={handleGoHome}
+            title="Go to Home"
+          >
+            <div className="flex items-center justify-center">
+              <Logo className="w-10 h-10" />
+            </div>
+          </div>
+          <div className="flex items-center gap-1 sm:gap-3 overflow-x-auto no-scrollbar py-1 min-w-0">
+            {currentUser?.role === 'handyman' && (
+              <button 
+                onClick={() => setShowPricing(true)}
+                className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold border border-blue-100 hover:bg-blue-100 transition-colors shrink-0"
+              >
+                <CreditCard size={14} />
+                <span>{currentUser.credits || 0} Credits</span>
+              </button>
+            )}
+            {currentUser && (
+              <div className="relative shrink-0">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className={`p-2 rounded-full transition-colors relative ${
+                    showNotifications ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Bell size={18} className="sm:w-[20px] sm:h-[20px]" />
+                  {notifications.filter(n => !n.read).length > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+                  )}
+                </button>
+              </div>
+            )}
+            {isAdmin && (
+              <button 
+                onClick={() => {
+                  setShowAdminDashboard(!showAdminDashboard);
+                  setShowPricing(false);
+                  setShowRequests(false);
+                  setShowChatList(false);
+                }}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
+                  showAdminDashboard ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <ShieldCheck size={18} />
+                <span className="hidden lg:inline">Admin</span>
+              </button>
+            )}
+            <button 
+              onClick={() => {
+                setShowPricing(!showPricing);
+                setShowRequests(false);
+                setShowAdminDashboard(false);
+              }}
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
+                showPricing ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Zap size={18} />
+              <span className="hidden sm:inline">Pricing</span>
+            </button>
+            <button 
+              onClick={() => {
+                setShowRequests(!showRequests);
+                setShowPricing(false);
+                setShowChatList(false);
+                setShowAdminDashboard(false);
+              }}
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
+                showRequests ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Clock size={18} />
+              <span className="hidden lg:inline">My Requests</span>
+            </button>
+            <button 
+              onClick={() => {
+                setShowChatList(!showChatList);
+                setShowRequests(false);
+                setShowPricing(false);
+                setShowAdminDashboard(false);
+              }}
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
+                showChatList ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <MessageCircle size={18} />
+              <span className="hidden lg:inline">Messages</span>
+              {chats.length > 0 && (
+                <span className="bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
+                  {chats.length}
+                </span>
+              )}
+            </button>
+            {currentUser && (
+              <button 
+                onClick={() => {
+                  if (myProProfile) {
+                    setShowEditProfile(!showEditProfile);
+                    setShowUserProfileModal(false);
+                  } else {
+                    setShowUserProfileModal(!showUserProfileModal);
+                    setShowEditProfile(false);
+                  }
+                  setShowRequests(false);
+                  setShowChatList(false);
+                  setShowAdminDashboard(false);
+                }}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
+                  (showEditProfile || showUserProfileModal) ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <User size={18} />
+                <span className="hidden lg:inline">Profile</span>
+              </button>
+            )}
+            {currentUser ? (
+              <button 
+                onClick={handleLogout}
+                className="flex items-center gap-1 sm:gap-2 bg-slate-100 text-slate-600 px-2 sm:px-4 py-2 rounded-full text-sm font-medium hover:bg-slate-200 transition-colors shrink-0"
+              >
+                <LogOut size={18} />
+                <span className="hidden lg:inline">Logout</span>
+              </button>
+            ) : (
+              <button 
+                onClick={handleLogin}
+                className="flex items-center gap-1 sm:gap-2 bg-blue-600 text-white px-2 sm:px-4 py-2 rounded-full text-sm font-medium hover:bg-blue-700 transition-colors shrink-0"
+              >
+                <LogIn size={18} />
+                <span className="hidden lg:inline">Login</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-8 pb-24 sm:pb-8">
+        {showPricing ? (
+          <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold mb-4">Grow Your Business</h2>
+              <p className="text-slate-500 max-w-xl mx-auto">
+                Choose the plan that fits your professional needs. Get more visibility, more leads, and grow your reputation.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
+              {PRICING_PLANS.map((plan) => (
+                <div 
+                  key={plan.id}
+                  className={`relative flex flex-col bg-white p-8 rounded-3xl border transition-all ${
+                    plan.recommended 
+                    ? 'border-blue-600 shadow-xl shadow-blue-600/10 scale-105 z-10' 
+                    : 'border-slate-200 hover:border-blue-200'
+                  }`}
+                >
+                  {plan.recommended && (
+                    <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-bold uppercase px-4 py-1.5 rounded-full">
+                      Most Popular
+                    </span>
+                  )}
+                  
+                  <div className="mb-8">
+                    <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl font-black">{plan.price}</span>
+                      <span className="text-slate-400 text-sm">{plan.period}</span>
+                    </div>
+                  </div>
+
+                  <ul className="space-y-4 mb-8 flex-1">
+                    {plan.features.map((feature, i) => (
+                      <li key={i} className="flex items-start gap-3 text-sm text-slate-600">
+                        <CheckCircle2 size={18} className="text-blue-600 shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <button 
+                    onClick={() => {
+                      setSelectedPlan(plan);
+                      setShowCheckout(true);
+                    }}
+                    className={`w-full py-4 rounded-2xl font-bold transition-all ${
+                      plan.recommended
+                      ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20'
+                      : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
+                    }`}
+                  >
+                    {plan.buttonText}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-blue-50 p-8 rounded-3xl text-center">
+              <h4 className="font-bold text-blue-900 mb-2">Why upgrade to Featured Pro?</h4>
+              <p className="text-blue-700 text-sm mb-6">
+                Featured professionals receive up to 10x more job requests than standard listings.
+              </p>
+              <div className="flex flex-wrap justify-center gap-8">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-900">10x</div>
+                  <div className="text-xs text-blue-600 uppercase font-bold">More Leads</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-900">Top 1</div>
+                  <div className="text-xs text-blue-600 uppercase font-bold">Search Rank</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-900">24/7</div>
+                  <div className="text-xs text-blue-600 uppercase font-bold">Support</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-12">
+              <h3 className="text-xl font-bold text-center mb-6">Need more leads? Buy Credit Packs</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[
+                  { amount: 1, price: '₦500', label: 'Pay-per-Lead' },
+                  { amount: 10, price: '₦4,000', label: 'Starter Pack', popular: true },
+                  { amount: 50, price: '₦15,000', label: 'Growth Pack' }
+                ].map((pack) => (
+                  <button
+                    key={pack.amount}
+                    onClick={() => handleBuyCredits(pack.amount)}
+                    className={`p-6 rounded-2xl border transition-all text-left relative overflow-hidden group ${
+                      pack.popular ? 'border-blue-200 bg-white shadow-md' : 'border-slate-100 bg-slate-50/50'
+                    }`}
+                  >
+                    {pack.popular && (
+                      <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl">
+                        BEST VALUE
+                      </div>
+                    )}
+                    <div className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">{pack.label}</div>
+                    <div className="text-2xl font-black text-slate-900 mb-1">{pack.amount} Credits</div>
+                    <div className="text-blue-600 font-bold">{pack.price}</div>
+                    <div className="mt-4 flex items-center gap-2 text-xs font-bold text-slate-400 group-hover:text-blue-600 transition-colors">
+                      Buy Now <ChevronRight size={14} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="mt-12 text-center">
+              <button 
+                onClick={() => setShowPricing(false)}
+                className="text-slate-500 font-medium hover:text-blue-600"
+              >
+                ← Back to Search
+              </button>
+            </div>
+          </section>
+        ) : showRequests ? (
+          <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {currentUser?.role === 'handyman' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+                      <CreditCard size={20} />
+                    </div>
+                    <h3 className="font-bold text-slate-900">Lead Credits</h3>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-slate-900">{currentUser.credits || 0}</span>
+                    <span className="text-slate-400 text-sm">Available</span>
+                  </div>
+                  <button 
+                    onClick={() => setShowPricing(true)}
+                    className="mt-4 text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                  >
+                    Buy More Credits <ChevronRight size={14} />
+                  </button>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-600">
+                      <ShieldCheck size={20} />
+                    </div>
+                    <h3 className="font-bold text-slate-900">Verification</h3>
+                  </div>
+                  {myProProfile?.verified ? (
+                    <div className="flex items-center gap-2 text-green-600 font-bold">
+                      <CheckCircle2 size={18} />
+                      <span>Verified Pro</span>
+                    </div>
+                  ) : currentUser.isVerifiedPending ? (
+                    <div className="flex items-center gap-2 text-amber-600 font-bold">
+                      <Clock size={18} />
+                      <span>Pending Review</span>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-slate-500 text-xs mb-4">Get verified to build trust with clients.</p>
+                      <button 
+                        onClick={() => {
+                          const input = document.createElement('input');
+                          input.type = 'file';
+                          input.accept = 'image/*,application/pdf';
+                          input.onchange = (e) => {
+                            const file = (e.target as HTMLInputElement).files?.[0];
+                            if (file) handleApplyVerification(file);
+                          };
+                          input.click();
+                        }}
+                        className="w-full py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors"
+                      >
+                        Apply for Verification
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-2xl bg-green-50 flex items-center justify-center text-green-600">
+                      <TrendingUp size={20} />
+                    </div>
+                    <h3 className="font-bold text-slate-900">Performance</h3>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-slate-900">{jobRequests.length}</span>
+                    <span className="text-slate-400 text-sm">Total Leads</span>
+                  </div>
+                  <p className="text-slate-500 text-[10px] mt-2 font-medium uppercase tracking-wider">
+                    {currentUser.plan === 'pro' ? 'Featured Pro Plan Active' : 'Starter Plan'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-bold">My Job Requests</h2>
+              <button 
+                onClick={() => setShowRequests(false)}
+                className="text-blue-600 font-medium hover:underline"
+              >
+                Back to Search
+              </button>
+            </div>
+            
+            <div className="grid gap-4">
+              {jobRequests.length === 0 ? (
+                <div className="text-center py-20 bg-white border border-dashed border-slate-200 rounded-3xl">
+                  <Clock size={48} className="mx-auto text-slate-200 mb-4" />
+                  <p className="text-slate-400">You haven't made any requests yet.</p>
+                </div>
+              ) : (
+                jobRequests.map((req) => (
+                  <div key={req.id} className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className="font-bold text-lg text-slate-900">
+                          {currentUser?.role === 'handyman' ? `Request from ${req.userName}` : `Request for ${req.proName}`}
+                        </h4>
+                        <p className="text-slate-400 text-xs uppercase font-bold tracking-wider">ID: #{req.id} • {req.date}</p>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
+                        req.status === 'completed' ? 'bg-green-50 text-green-600' : 
+                        req.status === 'responded' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
+                      }`}>
+                        {req.status}
+                      </span>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl mb-4">
+                      <p className="text-slate-600 text-sm italic">"{req.jobDescription}"</p>
+                    </div>
+                    
+                    {currentUser?.role === 'handyman' ? (
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-wrap gap-2">
+                          <button 
+                            onClick={() => handleUpdateJobStatus(req, 'responded')}
+                            disabled={req.status === 'responded'}
+                            className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            Mark as Responded
+                          </button>
+                          <button 
+                            onClick={() => handleUpdateJobStatus(req, 'completed')}
+                            disabled={req.status === 'completed'}
+                            className="px-4 py-2 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 disabled:opacity-50"
+                          >
+                            Mark as Completed
+                          </button>
+                          {currentUser?.plan === 'pro' || req.unlockedBy?.includes(currentUser?.uid || '') ? (
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => startChat(req.userUid, req.userName)}
+                                className="px-4 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg hover:bg-blue-100 flex items-center gap-1"
+                              >
+                                <MessageCircle size={14} />
+                                Chat with Client
+                              </button>
+                              {req.userPhone && (
+                                <a 
+                                  href={`tel:${req.userPhone}`}
+                                  className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 flex items-center gap-1"
+                                >
+                                  <Phone size={14} />
+                                  Call ({req.userPhone})
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => handleUnlockLead(req.id)}
+                              className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 flex items-center gap-1 shadow-sm"
+                            >
+                              <Lock size={14} />
+                              Unlock Lead (1 Credit)
+                            </button>
+                          )}
+                        </div>
+                        
+                        {req.paymentStatus && (
+                          <div className="pt-2 border-t border-slate-100">
+                            <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
+                              req.paymentStatus === 'escrowed' ? 'bg-amber-50 text-amber-600' : 
+                              req.paymentStatus === 'released' ? 'bg-emerald-50 text-emerald-600' : 
+                              req.paymentStatus === 'disputed' ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-600'
+                            }`}>
+                              Payment: {req.paymentStatus}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-slate-500 text-xs">
+                          <CheckCircle2 size={14} className="text-green-500" />
+                          <span>Sent to professional via WhatsApp</span>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                          {req.paymentStatus === 'pending' && (
+                            <button 
+                              onClick={() => handleInitializePayment(req, 5000)}
+                              className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 flex items-center gap-2 shadow-sm shadow-blue-200"
+                            >
+                              <CreditCard size={14} />
+                              Pay ₦5,000 (Escrow)
+                            </button>
+                          )}
+                          
+                          {req.paymentStatus === 'escrowed' && (
+                            <>
+                              <button 
+                                onClick={() => handleReleaseFunds(req.id)}
+                                className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 flex items-center gap-2 shadow-sm shadow-emerald-200"
+                              >
+                                <CheckCircle2 size={14} />
+                                Release Funds
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  const reason = prompt("Reason for dispute:");
+                                  if (reason) handleRaiseDispute(req.id, reason);
+                                }}
+                                className="px-4 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-xl hover:bg-red-100 flex items-center gap-2"
+                              >
+                                <AlertTriangle size={14} />
+                                Raise Dispute
+                              </button>
+                            </>
+                          )}
+                          
+                          {req.paymentStatus === 'released' && (
+                            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-full">
+                              <ShieldCheck size={14} /> Funds Released to Pro
+                            </span>
+                          )}
+
+                          {req.paymentStatus === 'disputed' && (
+                            <span className="text-xs font-bold text-amber-600 flex items-center gap-1 bg-amber-50 px-3 py-1.5 rounded-full">
+                              <AlertTriangle size={14} /> Dispute Under Review
+                            </span>
+                          )}
+
+                          {req.paymentStatus === 'refunded' && (
+                            <span className="text-xs font-bold text-blue-600 flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full">
+                              <RotateCcw size={14} /> Payment Refunded
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        ) : showChatList ? (
+          <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px] md:h-[calc(100vh-200px)] flex flex-col md:flex-row gap-6">
+            <div className={`flex-1 md:w-80 bg-white border border-slate-200 rounded-3xl overflow-hidden flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
+              <div className="p-6 border-b border-slate-100">
+                <h2 className="text-xl font-bold">Messages</h2>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {chats.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <MessageCircle size={40} className="mx-auto text-slate-200 mb-4" />
+                    <p className="text-slate-400 text-sm">No conversations yet.</p>
+                  </div>
+                ) : (
+                  chats.map((chat) => (
+                    <button
+                      key={chat.id}
+                      onClick={() => setActiveChat(chat)}
+                      className={`w-full p-4 text-left hover:bg-slate-50 transition-colors border-b border-slate-50 flex items-center gap-3 ${
+                        activeChat?.id === chat.id ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 font-bold">
+                        {chat.otherParticipantName?.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-baseline">
+                          <h4 className="font-bold text-slate-900 truncate">{chat.otherParticipantName}</h4>
+                        </div>
+                        <p className="text-xs text-slate-500 truncate">{chat.lastMessage || 'Start a conversation'}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className={`flex-[2] bg-white border border-slate-200 rounded-3xl overflow-hidden ${!activeChat ? 'hidden md:flex items-center justify-center' : 'flex flex-col'}`}>
+              {activeChat && currentUser ? (
+                <ChatWindow 
+                  chat={activeChat} 
+                  currentUser={currentUser} 
+                  onClose={() => setActiveChat(null)} 
+                  createNotification={createNotification}
+                />
+              ) : (
+                <div className="text-center p-12">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+                    <MessageCircle size={32} />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900">Select a conversation</h3>
+                  <p className="text-slate-500 text-sm">Choose a chat from the list to start messaging</p>
+                </div>
+              )}
+            </div>
+          </section>
+        ) : (
+          <>
+            {/* Hero / Search Section */}
+        <motion.section 
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 1 }}
+          className="mb-12 text-center"
+        >
+          <motion.h2 
+            className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4 leading-tight"
+          >
+            <motion.span
+              initial={{ opacity: 1, y: 0 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="block"
+            >
+              Find the right handyman
+            </motion.span>
+            <motion.span 
+              initial={{ opacity: 1, y: 0 }}
+              animate={{ 
+                opacity: 1, 
+                y: [0, -4, 0],
+              }}
+              transition={{ 
+                opacity: { delay: 0.4, duration: 0.8, ease: [0.2, 0.65, 0.3, 0.9] },
+                y: { 
+                  delay: 1.5, 
+                  duration: 5, 
+                  repeat: Infinity, 
+                  ease: "easeInOut" 
+                }
+              }}
+              className="text-blue-600 italic block sm:inline"
+            >
+              anywhere in Nigeria
+            </motion.span>
+          </motion.h2>
+          
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6, duration: 0.6 }}
+              className="flex flex-col lg:flex-row items-center justify-center gap-4 mb-4"
+            >
+              <div className="relative w-full max-w-xl">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <input 
+                  type="text"
+                  placeholder="Search by name or Location"
+                  className="w-full pl-12 pr-10 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-500"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                <button 
+                  onClick={handleGetLocation}
+                  className={`flex-1 lg:w-48 h-[60px] flex items-center justify-center gap-2 px-6 rounded-2xl font-bold transition-all whitespace-nowrap shadow-sm border ${
+                    userLocation 
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-blue-600/20' 
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600'
+                  }`}
+                >
+                  <Navigation size={20} className={userLocation ? 'animate-pulse' : ''} />
+                  <span>{userLocation ? 'Location Active' : 'Find Nearby'}</span>
+                </button>
+                <button 
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`flex-1 lg:w-48 h-[60px] flex items-center justify-center gap-2 px-6 rounded-2xl font-bold transition-all whitespace-nowrap shadow-sm border ${
+                    showFilters || minRating > 0 || minExperience > 0 
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-blue-600/20' 
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600'
+                  }`}
+                >
+                  <Filter size={20} />
+                  <span>Filters {(minRating > 0 || minExperience > 0) && `(${(minRating > 0 ? 1 : 0) + (minExperience > 0 ? 1 : 0)})`}</span>
+                </button>
+              </div>
+            </motion.div>
+
+            <AnimatePresence>
+              {showFilters && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="max-w-xl mx-auto bg-white border border-slate-200 rounded-2xl p-6 mb-4 shadow-sm text-left">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Minimum Rating</label>
+                        <div className="flex items-center gap-2">
+                          {[0, 1, 2, 3, 4].map((r) => (
+                            <button
+                              key={r}
+                              onClick={() => setMinRating(r + 1 === minRating ? 0 : r + 1)}
+                              className={`flex-1 py-2 rounded-xl border-2 transition-all flex items-center justify-center gap-1 ${
+                                minRating > r ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-slate-100 text-slate-400 hover:border-slate-200'
+                              }`}
+                            >
+                              <span className="font-bold">{r + 1}</span>
+                              <Star size={14} className={minRating > r ? 'fill-blue-600' : ''} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">Min Experience (Years)</label>
+                        <div className="flex items-center gap-3">
+                          <input 
+                            type="range" 
+                            min="0" 
+                            max="20" 
+                            step="1"
+                            value={minExperience}
+                            onChange={(e) => setMinExperience(parseInt(e.target.value))}
+                            className="flex-1 accent-blue-600"
+                          />
+                          <span className="font-bold text-blue-600 w-12 text-center">{minExperience}+</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-6 flex justify-end">
+                      <button 
+                        onClick={() => {setMinRating(0); setMinExperience(0);}}
+                        className="text-sm font-bold text-slate-400 hover:text-blue-600 transition-colors uppercase tracking-widest"
+                      >
+                        Reset Filters
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {locationError && (
+              <p className="text-red-500 text-sm font-medium">{locationError}</p>
+            )}
+        </motion.section>
+
+        {/* Categories */}
+        <motion.section 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8, duration: 0.6 }}
+          className="mb-12"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-slate-700">Categories</h3>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.name}
+                onClick={() => setSelectedCategory(selectedCategory === cat.name ? 'All' : cat.name)}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl whitespace-nowrap transition-all ${
+                  selectedCategory === cat.name 
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
+                  : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-200'
+                }`}
+              >
+                <cat.icon size={18} />
+                <span className="text-sm font-medium">{cat.name}</span>
+              </button>
+            ))}
+          </div>
+        </motion.section>
+
+        {/* Handyman List */}
+        <section>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <h3 className="font-semibold text-slate-700">
+                {filteredHandymen.length} Professionals Found
+              </h3>
+              {(searchQuery || selectedCategory !== 'All' || minRating > 0 || minExperience > 0 || showOnlyOnline || showFavoritesOnly || useRadiusFilter) && (
+                <button 
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSelectedCategory('All');
+                    setMinRating(0);
+                    setMinExperience(0);
+                    setShowOnlyOnline(false);
+                    setShowFavoritesOnly(false);
+                    setUseRadiusFilter(false);
+                  }}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                >
+                  <X size={12} />
+                  Clear All Filters
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {userLocation && (
+                <button 
+                  onClick={() => setUseRadiusFilter(!useRadiusFilter)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                    useRadiusFilter 
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-600/20' 
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-blue-200 hover:text-blue-600'
+                  }`}
+                >
+                  <MapPin size={12} />
+                  Within 10 Miles
+                </button>
+              )}
+              <button 
+                onClick={() => setShowOnlyOnline(!showOnlyOnline)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                  showOnlyOnline 
+                  ? 'bg-green-600 text-white border-green-600 shadow-lg shadow-green-600/20' 
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-green-200 hover:text-green-600'
+                }`}
+              >
+                <div className={`w-2 h-2 rounded-full ${showOnlyOnline ? 'bg-white animate-pulse' : 'bg-gray-300'}`} />
+                Online Only
+              </button>
+              <button 
+                onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                  showFavoritesOnly 
+                  ? 'bg-red-600 text-white border-red-600 shadow-lg shadow-red-600/20' 
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-red-200 hover:text-red-600'
+                }`}
+              >
+                <Heart size={12} fill={showFavoritesOnly ? "currentColor" : "none"} />
+                Favorites
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <AnimatePresence mode="popLayout">
+              {filteredHandymen.map((handy) => (
+                <motion.div
+                  layout
+                  key={handy.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  onClick={() => setSelectedPro(handy)}
+                  className="bg-white border border-slate-200 p-5 rounded-2xl hover:shadow-md transition-shadow group cursor-pointer"
+                >
+                  <div className={`flex flex-col xl:flex-row xl:items-center justify-between gap-4 ${
+                    handy.verified && currentUser?.plan !== 'member' && currentUser?.role !== 'handyman' ? 'opacity-50 grayscale' : ''
+                  }`}>
+                    <div className="flex gap-4 flex-1">
+                      <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors shrink-0 relative overflow-hidden">
+                        {handy.profileImage ? (
+                          <img src={handy.profileImage} alt={handy.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <Hammer size={32} />
+                        )}
+                        {handy.verified && currentUser?.plan !== 'member' && currentUser?.role !== 'handyman' && (
+                          <div className="absolute inset-0 bg-slate-900/40 flex items-center justify-center">
+                            <Lock size={20} className="text-white" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-lg text-slate-900">{handy.name}</h4>
+                            {handy.availability && (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
+                                handy.availability === 'Available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                handy.availability === 'Busy' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                'bg-slate-50 text-slate-400 border-slate-100'
+                              }`}>
+                                {handy.availability}
+                              </span>
+                            )}
+                            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                              handy.isOnline 
+                              ? 'bg-green-50 text-green-600 border-green-100' 
+                              : 'bg-gray-50 text-gray-400 border-gray-100'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${handy.isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                              {handy.isOnline ? 'Online' : 'Offline'}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFavorite(handy.id);
+                            }}
+                            className={`p-2 rounded-full transition-all ${
+                              favorites.includes(handy.id)
+                              ? 'text-red-500 bg-red-50'
+                              : 'text-slate-300 hover:text-red-400 hover:bg-slate-50'
+                            }`}
+                          >
+                            <Heart size={20} fill={favorites.includes(handy.id) ? "currentColor" : "none"} />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 mb-1">
+                          {handy.isFeatured && (
+                            <span className="flex items-center gap-1 bg-amber-50 text-amber-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border border-amber-100">
+                              <Star size={10} fill="currentColor" />
+                              Featured
+                            </span>
+                          )}
+                          {handy.verified && (
+                            <span className="flex items-center gap-1 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border border-blue-100">
+                              <CheckCircle2 size={10} />
+                              Verified
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-blue-600 text-sm font-medium mb-2">{handy.category}</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-slate-500 text-xs">
+                          <span className="flex items-center gap-1">
+                            <MapPin size={14} /> {handy.location}
+                            {userLocation && (
+                              <span className="text-blue-500 font-bold ml-1">
+                                ({calculateDistance(userLocation.lat, userLocation.lng, handy.lat, handy.lng).toFixed(1)}km)
+                              </span>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <StarRating rating={handy.rating} />
+                            <span className="ml-1">({handy.reviews})</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 xl:flex-col xl:items-end">
+                      {handy.verified && currentUser?.plan !== 'member' && currentUser?.role !== 'handyman' ? (
+                        <div className="px-4 py-2 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded-lg border border-blue-100">
+                          Members Only
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 w-full xl:w-auto">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRequestingQuotePro(handy);
+                            }}
+                            className="flex-1 xl:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/10"
+                          >
+                            Request Quote
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {filteredHandymen.length === 0 && (
+              <div className="text-center py-20 bg-white border border-dashed border-slate-200 rounded-3xl">
+                <Search size={48} className="mx-auto text-slate-200 mb-4" />
+                <p className="text-slate-400">No handymen found matching your search.</p>
+                <button 
+                  onClick={() => {setSearchQuery(''); setSelectedCategory('All'); setMinRating(0); setMinExperience(0); setShowOnlyOnline(false); setShowFavoritesOnly(false); setUseRadiusFilter(false);}}
+                  className="mt-4 text-blue-600 font-medium"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+        </>
+      )}
+    </main>
+
+      {/* Detail Modal */}
+      <AnimatePresence>
+        {selectedPro && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedPro(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: 100, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 100, scale: 0.95 }}
+              className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => setSelectedPro(null)}
+                className="absolute right-6 top-6 p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="p-8">
+                <div className="flex gap-6 mb-8">
+                  <div className="w-24 h-24 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 relative overflow-hidden shrink-0">
+                    {selectedPro.profileImage ? (
+                      <img src={selectedPro.profileImage} alt={selectedPro.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <Hammer size={48} />
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h2 className="text-2xl font-bold text-slate-900">{selectedPro.name}</h2>
+                      {selectedPro.availability && (
+                        <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase border ${
+                          selectedPro.availability === 'Available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                          selectedPro.availability === 'Busy' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                          'bg-slate-50 text-slate-400 border-slate-100'
+                        }`}>
+                          {selectedPro.availability}
+                        </span>
+                      )}
+                      {selectedPro.verified && <CheckCircle2 size={20} className="text-blue-600" />}
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ml-2 ${
+                        selectedPro.isOnline 
+                        ? 'bg-green-50 text-green-600 border-green-100' 
+                        : 'bg-gray-50 text-gray-400 border-gray-100'
+                      }`}>
+                        <span className={`w-2 h-2 rounded-full ${selectedPro.isOnline ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                        {selectedPro.isOnline ? 'Online' : 'Offline'}
+                      </div>
+                    </div>
+                    <p className="text-blue-600 font-semibold mb-2">{selectedPro.category}</p>
+                    <div className="flex flex-wrap gap-4 text-slate-500 text-sm">
+                      <span className="flex items-center gap-1"><MapPin size={16} /> {selectedPro.location}</span>
+                      <div className="flex items-center gap-2">
+                        <StarRating rating={selectedPro.rating} />
+                        <span>({selectedPro.reviews} reviews)</span>
+                      </div>
+                      <span className="flex items-center gap-1"><Clock size={16} /> {selectedPro.experience} exp.</span>
+                    </div>
+                  </div>
+                </div>
+
+                {isAdmin && (
+                  <div className="mb-8 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 rounded-xl text-blue-600">
+                        <ShieldCheck size={24} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-blue-900">Admin Controls</p>
+                        <p className="text-xs text-blue-700">Verify this professional to increase trust.</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toggleVerification(selectedPro.id)}
+                      className={`px-6 py-2 rounded-xl font-bold transition-all ${
+                        selectedPro.verified
+                        ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20'
+                      }`}
+                    >
+                      {selectedPro.verified ? 'Revoke Verification' : 'Verify Professional'}
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-8">
+                  <section>
+                    <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <Briefcase size={18} className="text-blue-600" />
+                      About the Professional
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed">
+                      {selectedPro.description}
+                    </p>
+                  </section>
+
+                  {selectedPro.portfolio.length > 0 && (
+                    <section>
+                      <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                        <ImageIcon size={18} className="text-blue-600" />
+                        Portfolio
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {selectedPro.portfolio.map((img, i) => (
+                          <img key={i} src={img} alt="Work" className="rounded-xl w-full h-32 object-cover border border-slate-100" referrerPolicy="no-referrer" />
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  <section className="bg-slate-50 p-6 rounded-2xl">
+                    <h3 className="font-bold text-slate-900 mb-4">Customer Reviews</h3>
+                    <div className="space-y-4 mb-6">
+                      {reviews.filter(r => r.proId === selectedPro.id).map(review => (
+                        <div key={review.id} className="bg-white p-4 rounded-xl border border-slate-100">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold text-sm">{review.userName}</span>
+                            <div className="flex items-center gap-1 text-amber-400">
+                              <Star size={12} fill="currentColor" />
+                              <span className="text-xs font-bold">{review.rating}</span>
+                            </div>
+                          </div>
+                          <p className="text-slate-600 text-sm">{review.comment}</p>
+                          <span className="text-[10px] text-slate-400 mt-2 block">{review.date}</span>
+                        </div>
+                      ))}
+                      {reviews.filter(r => r.proId === selectedPro.id).length === 0 && (
+                        <p className="text-slate-400 text-sm italic">No reviews yet. Be the first!</p>
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-200 pt-4">
+                      <h4 className="text-sm font-bold mb-3">Leave a Review</h4>
+                      <div className="mb-4">
+                        <StarRating 
+                          rating={newReviewRating} 
+                          onRate={setNewReviewRating} 
+                          interactive 
+                        />
+                      </div>
+                      <textarea 
+                        placeholder="Share your experience..."
+                        className="w-full p-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none min-h-[100px]"
+                        value={newReviewComment}
+                        onChange={(e) => setNewReviewComment(e.target.value)}
+                      />
+                      <button
+                        onClick={() => {
+                          if (newReviewComment.trim()) {
+                            handleAddReview(selectedPro.id, newReviewRating, newReviewComment);
+                            setNewReviewComment('');
+                            setNewReviewRating(5);
+                          }
+                        }}
+                        className="mt-3 w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                      >
+                        Submit Review
+                      </button>
+                    </div>
+                  </section>
+
+                  {selectedPro.verified && currentUser?.plan !== 'member' && currentUser?.role !== 'handyman' ? (
+                    <div className="bg-blue-50 p-8 rounded-3xl text-center border border-blue-100">
+                      <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Lock size={32} />
+                      </div>
+                      <h3 className="text-xl font-bold text-blue-900 mb-2">Verified Professional</h3>
+                      <p className="text-blue-700 text-sm mb-6">
+                        Access to verified professionals is exclusive to our Community Members. 
+                        Join today to ensure quality and safety for your home projects.
+                      </p>
+                      <button 
+                        onClick={() => {
+                          setSelectedPro(null);
+                          const memberPlan = PRICING_PLANS.find(p => p.id === 'member');
+                          if (memberPlan) {
+                            setSelectedPlan(memberPlan);
+                            setShowCheckout(true);
+                          }
+                        }}
+                        className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                      >
+                        Join Community (₦1,000/mo)
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-4 pt-4">
+                      <button 
+                        onClick={() => startChat(selectedPro.id, selectedPro.name)}
+                        className="flex-1 flex items-center justify-center gap-2 bg-white border border-blue-600 text-blue-600 py-4 rounded-2xl font-bold hover:bg-blue-50 transition-all"
+                      >
+                        <MessageCircle size={20} />
+                        Chat Now
+                      </button>
+                      <button 
+                        onClick={() => setRequestingQuotePro(selectedPro)}
+                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20"
+                      >
+                        Request Free Quote
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Checkout Modal */}
+      {showCheckout && selectedPlan && (
+        <SimulatedCheckout 
+          plan={selectedPlan} 
+          onClose={() => setShowCheckout(false)}
+          onComplete={() => {
+            setShowCheckout(false);
+            setShowPricing(false);
+            if (selectedPlan.id === 'pro' || selectedPlan.id === 'enterprise') {
+              setShowRegForm(true);
+            }
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 5000);
+          }}
+        />
+      )}
+
+      {/* Auth Modal */}
+      <AnimatePresence>
+        {showAuthModal && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => setShowAuthModal(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 overflow-y-auto">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold">
+                    {authMode === 'login' ? 'Welcome Back' : authMode === 'signup' ? 'Create Account' : 'Reset Password'}
+                  </h2>
+                  <button 
+                    onClick={() => setShowAuthModal(false)}
+                    className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {authError && (
+                  <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600 text-sm">
+                    <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                    <p>{authError}</p>
+                  </div>
+                )}
+
+                {resetSent ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle2 size={32} />
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Check your email</h3>
+                    <p className="text-slate-500 mb-6">
+                      We've sent a password reset link to <span className="font-semibold text-slate-900">{authEmail}</span>.
+                    </p>
+                    <button 
+                      onClick={() => {
+                        setResetSent(false);
+                        setAuthMode('login');
+                      }}
+                      className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all"
+                    >
+                      Back to Login
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleEmailAuth} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email Address</label>
+                      <div className="relative">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input 
+                          type="email"
+                          required
+                          className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                          placeholder="you@example.com"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    {authMode !== 'reset' && (
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className="block text-sm font-semibold text-slate-700">Password</label>
+                          {authMode === 'login' && (
+                            <button 
+                              type="button"
+                              onClick={() => setAuthMode('reset')}
+                              className="text-xs font-bold text-blue-600 hover:text-blue-700"
+                            >
+                              Forgot Password?
+                            </button>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                          <input 
+                            type="password"
+                            required
+                            minLength={6}
+                            className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                            placeholder="••••••••"
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button 
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {authLoading ? (
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        authMode === 'login' ? 'Sign In' : authMode === 'signup' ? 'Create Account' : 'Send Reset Link'
+                      )}
+                    </button>
+
+                    {authMode !== 'reset' && (
+                      <div className="relative py-4">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-slate-100"></div>
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                          <span className="bg-white px-2 text-slate-400 font-medium">Or continue with</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {authMode !== 'reset' && (
+                      <button 
+                        type="button"
+                        onClick={handleGoogleLogin}
+                        className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
+                      >
+                        <svg className="w-5 h-5" viewBox="0 0 24 24">
+                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        </svg>
+                        Google
+                      </button>
+                    )}
+
+                    <div className="text-center pt-4">
+                      <p className="text-sm text-slate-500">
+                        {authMode === 'login' ? "Don't have an account?" : authMode === 'signup' ? "Already have an account?" : "Remember your password?"}
+                        {' '}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setAuthMode(authMode === 'login' ? 'signup' : 'login');
+                            setAuthError(null);
+                          }}
+                          className="font-bold text-blue-600 hover:text-blue-700"
+                        >
+                          {authMode === 'login' ? 'Sign Up' : 'Log In'}
+                        </button>
+                      </p>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Registration Modal */}
+      <AnimatePresence>
+        {showRegForm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowRegForm(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-8 max-h-[90vh] overflow-y-auto"
+            >
+              <h2 className="text-2xl font-bold mb-6">Join Ṣe Ṣe Wá</h2>
+              <form className="space-y-4" onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                handleAddPro({
+                  name: fd.get('name') as string,
+                  category: fd.get('category') as any,
+                  location: fd.get('location') as string,
+                  phone: fd.get('phone') as string,
+                  whatsapp: fd.get('whatsapp') as string,
+                  experience: `${fd.get('experienceYears')} years`,
+                  experienceYears: parseInt(fd.get('experienceYears') as string) || 0,
+                  description: fd.get('description') as string,
+                  portfolio: fd.get('portfolio') ? [fd.get('portfolio') as string] : [],
+                  lat: 6.5244, // Default Lagos
+                  lng: 3.3792
+                });
+              }}>
+                <div className="grid grid-cols-2 gap-4">
+                  <input name="name" placeholder="Full Name" required className="p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                  <select name="category" required className="p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20">
+                    {CATEGORIES.filter(c => c.name !== 'All').map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                <input name="location" placeholder="Location (City, State)" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                <div className="grid grid-cols-2 gap-4">
+                  <input name="phone" placeholder="Phone Number" required className="p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                  <input name="whatsapp" placeholder="WhatsApp (e.g. 234...)" className="p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                </div>
+                <input 
+                  name="experienceYears" 
+                  type="number"
+                  min="0"
+                  placeholder="Years of Experience (e.g. 5)" 
+                  required 
+                  className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" 
+                />
+                
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-400 uppercase">Profile Image</label>
+                  <div className="flex items-center gap-4">
+                    <label className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
+                      <Upload size={20} className="text-slate-400" />
+                      <span className="text-sm text-slate-500">{profileImageFile ? profileImageFile.name : 'Upload Profile Photo'}</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => setProfileImageFile(e.target.files?.[0] || null)}
+                      />
+                    </label>
+                    {profileImageFile && (
+                      <button 
+                        type="button" 
+                        onClick={() => setProfileImageFile(null)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <X size={20} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <input name="portfolio" placeholder="Portfolio Image URL (Optional)" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                <textarea name="description" placeholder="Tell us about your services..." required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 h-24" />
+                
+                <div className="flex gap-4 pt-4">
+                  <button type="button" disabled={isRegistering} onClick={() => setShowRegForm(false)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
+                  <button type="submit" disabled={isRegistering} className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    {isRegistering ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Registering...
+                      </>
+                    ) : 'Register Now'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Admin Dashboard */}
+      <AnimatePresence>
+        {showAdminDashboard && (
+          <div className="fixed inset-0 z-[70] bg-white overflow-y-auto">
+            <motion.div 
+              initial={{ opacity: 0, x: '100%' }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: '100%' }}
+              className="min-h-screen"
+            >
+              <div className="max-w-4xl mx-auto px-6 py-12">
+                <div className="flex items-center justify-between mb-12">
+                  <div className="flex items-center gap-4">
+                    <button 
+                      onClick={() => setShowAdminDashboard(false)}
+                      className="p-3 bg-slate-100 rounded-2xl text-slate-600 hover:bg-slate-200 transition-colors"
+                    >
+                      <ChevronRight className="rotate-180" size={24} />
+                    </button>
+                    <div>
+                      <h2 className="text-3xl font-bold text-slate-900">Admin Dashboard</h2>
+                      <p className="text-slate-500">Manage and verify professional listings</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl font-bold border border-blue-100">
+                    <ShieldCheck size={20} />
+                    Administrator
+                  </div>
+                </div>
+
+                {/* Disputes Section */}
+                {disputes.length > 0 && (
+                  <div className="mb-12">
+                    <div className="flex items-center gap-2 mb-6">
+                      <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                      <h3 className="text-xl font-bold text-slate-900">Active Disputes</h3>
+                      <span className="bg-amber-50 text-amber-600 text-xs font-bold px-2 py-0.5 rounded-full border border-amber-100">
+                        {disputes.filter(d => d.status === 'open').length}
+                      </span>
+                    </div>
+                    <div className="grid gap-4">
+                      {disputes.filter(d => d.status === 'open').map(dispute => (
+                        <div key={dispute.id} className="bg-white border-2 border-amber-100 rounded-3xl p-6 shadow-lg shadow-amber-600/5">
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Dispute #{dispute.id}</span>
+                            <span className="text-xs text-slate-400">
+                              {dispute.createdAt?.seconds ? new Date(dispute.createdAt.seconds * 1000).toLocaleDateString() : 'Just now'}
+                            </span>
+                          </div>
+                          <p className="text-slate-700 mb-4 font-medium">"{dispute.reason}"</p>
+                          <div className="flex items-center gap-3">
+                            <button 
+                              onClick={() => handleResolveDispute(dispute.id, 'refunded')}
+                              className="flex-1 py-2 bg-red-50 text-red-600 rounded-xl font-bold hover:bg-red-100 transition-all"
+                            >
+                              Refund User
+                            </button>
+                            <button 
+                              onClick={() => handleResolveDispute(dispute.id, 'resolved')}
+                              className="flex-1 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-bold hover:bg-emerald-100 transition-all"
+                            >
+                              Release to Pro
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {pendingVerifications.length > 0 && (
+                  <div className="mb-12">
+                    <div className="flex items-center gap-2 mb-6">
+                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                      <h3 className="text-xl font-bold text-slate-900">Pending Verifications</h3>
+                      <span className="bg-red-50 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full border border-red-100">
+                        {pendingVerifications.length}
+                      </span>
+                    </div>
+                    <div className="grid gap-4">
+                      {pendingVerifications.map(user => (
+                        <div key={user.uid} className="bg-white border-2 border-blue-100 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 shadow-lg shadow-blue-600/5">
+                          <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-400 overflow-hidden shrink-0 border border-blue-100">
+                              {user.photoURL ? (
+                                <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                <User size={24} />
+                              )}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-slate-900">{user.name}</h4>
+                              <p className="text-sm text-slate-500 mb-1">{user.email}</p>
+                              {user.idDocumentUrl && (
+                                <a 
+                                  href={user.idDocumentUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1 mb-1"
+                                >
+                                  <ImageIcon size={12} /> View ID Document
+                                </a>
+                              )}
+                              <div className="flex items-center gap-2">
+                                <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                  {user.role}
+                                </span>
+                                {user.phone && (
+                                  <span className="text-[10px] text-slate-400 font-medium">{user.phone}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button 
+                              onClick={() => handleRejectVerification(user.uid)}
+                              className="px-4 py-2 text-slate-400 font-bold hover:text-red-500 transition-colors"
+                            >
+                              Reject
+                            </button>
+                            <button 
+                              onClick={() => handleApproveVerification(user.uid)}
+                              className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                            >
+                              Approve
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 mb-6">
+                  <h3 className="text-xl font-bold text-slate-900">All Professionals</h3>
+                  <span className="bg-slate-100 text-slate-600 text-xs font-bold px-2 py-0.5 rounded-full border border-slate-200">
+                    {handymen.length}
+                  </span>
+                </div>
+
+                <div className="grid gap-4">
+                  {handymen.map(pro => (
+                    <div key={pro.id} className="bg-white border border-slate-200 rounded-3xl p-6 flex items-center justify-between hover:border-blue-200 transition-all group">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 overflow-hidden shrink-0 border border-slate-100">
+                          {pro.profileImage ? (
+                            <img src={pro.profileImage} alt={pro.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          ) : (
+                            <Hammer size={24} />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-slate-900">{pro.name}</h4>
+                            {pro.verified && (
+                              <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-100">
+                                Verified
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-blue-600 font-medium mb-1">{pro.category}</p>
+                          <p className="text-xs text-slate-400 flex items-center gap-1">
+                            <MapPin size={12} /> {pro.location}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => toggleVerification(pro.id)}
+                          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                            pro.verified
+                            ? 'bg-red-50 text-red-600 hover:bg-red-100'
+                            : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/10'
+                          }`}
+                        >
+                          {pro.verified ? 'Revoke' : 'Verify'}
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setSelectedPro(pro);
+                            setShowAdminDashboard(false);
+                          }}
+                          className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-100 hover:text-slate-600 transition-all"
+                        >
+                          <ChevronRight size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Request Quote Modal */}
+      <AnimatePresence>
+        {requestingQuotePro && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setRequestingQuotePro(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-8 max-h-[90vh] overflow-y-auto"
+            >
+              <h2 className="text-2xl font-bold mb-2">Request a Quote</h2>
+              <p className="text-slate-500 mb-6 text-sm">
+                Fill this out to contact <span className="font-bold text-slate-900">{requestingQuotePro.name}</span>. 
+                Your request will be monitored for quality assurance.
+              </p>
+              
+              <form className="space-y-4" onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                handleRequestQuote({
+                  name: fd.get('name') as string,
+                  description: fd.get('description') as string
+                });
+              }}>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-400 uppercase ml-1">Your Name</label>
+                  <input name="name" placeholder="Enter your name" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-400 uppercase ml-1">Job Description</label>
+                  <textarea name="description" placeholder="What do you need help with?" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 h-32" />
+                </div>
+                
+                <div className="flex gap-4 pt-4">
+                  <button type="button" onClick={() => setRequestingQuotePro(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
+                  <button type="submit" className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20">Send Request</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showUserProfileModal && currentUser && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowUserProfileModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: 100, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 100, scale: 0.95 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 overflow-y-auto">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-slate-900">Profile Settings</h2>
+                  <button onClick={() => setShowUserProfileModal(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <form className="space-y-6" onSubmit={(e) => {
+                  e.preventDefault();
+                  const fd = new FormData(e.currentTarget);
+                  handleUpdateUserProfile({
+                    name: fd.get('name') as string,
+                    phone: fd.get('phone') as string
+                  });
+                }}>
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Full Name</label>
+                      <input name="name" defaultValue={currentUser.name} required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Phone Number (Required for calls)</label>
+                      <input name="phone" defaultValue={currentUser.phone} placeholder="e.g. +234 800 000 0000" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck size={18} className="text-blue-600" />
+                        <span className="font-bold text-slate-900">Membership Status</span>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
+                        currentUser.plan === 'member' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'
+                      }`}>
+                        {currentUser.plan === 'member' ? 'Active Member' : 'Free Tier'}
+                      </span>
+                    </div>
+                    
+                    {currentUser.plan !== 'member' ? (
+                      <div>
+                        <p className="text-xs text-slate-500 mb-4">Upgrade to access verified pros only and get community protection.</p>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setShowUserProfileModal(false);
+                            const memberPlan = PRICING_PLANS.find(p => p.id === 'member');
+                            if (memberPlan) {
+                              setSelectedPlan(memberPlan);
+                              setShowCheckout(true);
+                            }
+                          }}
+                          className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/10"
+                        >
+                          Upgrade to Member (₦1,000/mo)
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-emerald-600 text-xs font-bold">
+                        <CheckCircle2 size={14} />
+                        <span>You are a verified community member!</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {currentUser.role === 'handyman' && (
+                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck size={18} className="text-blue-600" />
+                          <span className="font-bold text-slate-900">Verification Status</span>
+                        </div>
+                        <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
+                          currentUser.verified ? 'bg-blue-600 text-white' : 
+                          currentUser.isVerifiedPending ? 'bg-amber-100 text-amber-600' : 'bg-slate-200 text-slate-500'
+                        }`}>
+                          {currentUser.verified ? 'Verified' : 
+                           currentUser.isVerifiedPending ? 'Pending' : 'Not Verified'}
+                        </span>
+                      </div>
+                      
+                      {!currentUser.verified && !currentUser.isVerifiedPending && (
+                        <div>
+                          <p className="text-xs text-slate-500 mb-4">Get verified to build trust and access premium customers. Please upload a valid Government ID.</p>
+                          <div className="space-y-3">
+                            <div className="relative">
+                              <input 
+                                type="file" 
+                                id="id-upload"
+                                className="hidden" 
+                                accept="image/*,.pdf"
+                                onChange={(e) => setVerificationFile(e.target.files?.[0] || null)}
+                              />
+                              <label 
+                                htmlFor="id-upload"
+                                className="flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-xs font-bold text-slate-500 cursor-pointer hover:border-blue-400 hover:text-blue-600 transition-all"
+                              >
+                                <Upload size={14} />
+                                {verificationFile ? verificationFile.name : 'Choose ID Document'}
+                              </label>
+                            </div>
+                            <button 
+                              type="button"
+                              disabled={!verificationFile || isRegistering}
+                              onClick={() => verificationFile && handleApplyVerification(verificationFile)}
+                              className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isRegistering ? 'Uploading...' : 'Submit for Verification'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {currentUser.isVerifiedPending && (
+                        <p className="text-xs text-amber-600 font-medium italic">
+                          Your verification request is currently being reviewed by our team.
+                        </p>
+                      )}
+                      {currentUser.verified && (
+                        <div className="flex items-center gap-2 text-emerald-600 text-xs font-bold">
+                          <CheckCircle2 size={14} />
+                          <span>Your professional profile is verified!</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all">
+                    Save Profile Changes
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showEditProfile && myProProfile && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowEditProfile(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 overflow-y-auto">
+                <h2 className="text-2xl font-bold mb-6">Edit Professional Profile</h2>
+                <form className="space-y-4" onSubmit={(e) => {
+                  e.preventDefault();
+                  const fd = new FormData(e.currentTarget);
+                  handleUpdatePro({
+                    name: fd.get('name') as string,
+                    location: fd.get('location') as string,
+                    phone: fd.get('phone') as string,
+                    whatsapp: fd.get('whatsapp') as string,
+                    description: fd.get('description') as string,
+                    availability: fd.get('availability') as any,
+                    portfolio: fd.get('portfolio') ? [fd.get('portfolio') as string] : myProProfile.portfolio
+                  });
+                }}>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase ml-1">Full Name</label>
+                    <input name="name" defaultValue={myProProfile.name} required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Phone</label>
+                      <input name="phone" defaultValue={myProProfile.phone} required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">WhatsApp</label>
+                      <input name="whatsapp" defaultValue={myProProfile.whatsapp} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase ml-1">Location</label>
+                    <input name="location" defaultValue={myProProfile.location} required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase ml-1">Availability Status</label>
+                    <select name="availability" defaultValue={myProProfile.availability || 'Available'} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20">
+                      <option value="Available">Available</option>
+                      <option value="Busy">Busy</option>
+                      <option value="Away">Away</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase ml-1">Profile Image</label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex-1 flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all">
+                        <Upload size={20} className="text-slate-400" />
+                        <span className="text-sm text-slate-500">{profileImageFile ? profileImageFile.name : 'Change Profile Photo'}</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => setProfileImageFile(e.target.files?.[0] || null)}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase ml-1">Description</label>
+                    <textarea name="description" defaultValue={myProProfile.description} required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 h-24" />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase ml-1">Portfolio Image URL</label>
+                    <input name="portfolio" defaultValue={myProProfile.portfolio[0] || ''} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                  </div>
+                  
+                  <div className="flex gap-4 pt-4">
+                    <button type="button" disabled={isUpdating} onClick={() => setShowEditProfile(false)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
+                    <button type="submit" disabled={isUpdating} className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-50 flex items-center justify-center gap-2">
+                      {isUpdating ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Updating...
+                        </>
+                      ) : 'Save Changes'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom Navigation for Mobile */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-2 flex items-center justify-between z-50 md:hidden">
+        <button 
+          onClick={handleGoHome}
+          className={`flex flex-col items-center gap-1 ${
+            (!showPricing && !showRequests && !showChatList && !showUserProfileModal && !showEditProfile && !showAdminDashboard) ? 'text-blue-600' : 'text-slate-400'
+          }`}
+        >
+          <Home size={18} />
+          <span className="text-[9px] font-bold">Home</span>
+        </button>
+        <button 
+          onClick={() => {
+            setShowRequests(true);
+            setShowPricing(false);
+            setShowChatList(false);
+            setShowAdminDashboard(false);
+            setShowEditProfile(false);
+            setShowUserProfileModal(false);
+          }}
+          className={`flex flex-col items-center gap-1 ${showRequests ? 'text-blue-600' : 'text-slate-400'}`}
+        >
+          <Clock size={18} />
+          <span className="text-[9px] font-bold">Requests</span>
+        </button>
+        <button 
+          onClick={() => {
+            setShowChatList(true);
+            setShowRequests(false);
+            setShowPricing(false);
+            setShowAdminDashboard(false);
+            setShowEditProfile(false);
+            setShowUserProfileModal(false);
+          }}
+          className={`flex flex-col items-center gap-1 relative ${showChatList ? 'text-blue-600' : 'text-slate-400'}`}
+        >
+          <MessageCircle size={18} />
+          <span className="text-[9px] font-bold">Messages</span>
+          {chats.length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">
+              {chats.length}
+            </span>
+          )}
+        </button>
+        <button 
+          onClick={() => {
+            if (currentUser) {
+              if (myProProfile) {
+                setShowEditProfile(true);
+              } else {
+                setShowUserProfileModal(true);
+              }
+            } else {
+              handleLogin();
+            }
+            setShowRequests(false);
+            setShowPricing(false);
+            setShowChatList(false);
+            setShowAdminDashboard(false);
+          }}
+          className={`flex flex-col items-center gap-1 ${(showEditProfile || showUserProfileModal) ? 'text-blue-600' : 'text-slate-400'}`}
+        >
+          <User size={18} />
+          <span className="text-[9px] font-bold">Profile</span>
+        </button>
+        {currentUser && (
+          <button 
+            onClick={handleLogout}
+            className="flex flex-col items-center gap-1 text-slate-400"
+          >
+            <LogOut size={18} />
+            <span className="text-[9px] font-bold">Logout</span>
+          </button>
+        )}
+      </nav>
+
+      {/* Footer */}
+      <footer className="max-w-6xl mx-auto px-4 py-12 border-t border-slate-200 mt-12 flex flex-col items-center gap-6">
+        <Logo size={64} className="opacity-40 grayscale hover:grayscale-0 transition-all cursor-pointer" />
+        
+        <div className="flex items-center gap-6 text-xs font-bold text-slate-400 uppercase tracking-widest">
+          <button onClick={() => setShowTerms(true)} className="hover:text-blue-600 transition-colors">Terms of Service</button>
+          <button onClick={() => setShowPrivacy(true)} className="hover:text-blue-600 transition-colors">Privacy Policy</button>
+          <a href="mailto:support@sesewa.app" className="hover:text-blue-600 transition-colors">Support</a>
+        </div>
+
+        <p className="text-slate-400 text-sm">
+          &copy; 2026 Ṣe Ṣe Wá Group Limited. Simple. Standalone. Local.
+        </p>
+      </footer>
+
+      {/* Terms of Service Modal */}
+      <AnimatePresence>
+        {showTerms && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTerms(false)}
+              className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className="relative w-full max-w-3xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900">Terms of Service</h2>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter mt-1">Last Updated: March 2026 • Nigeria Digital Law Compliant</p>
+                </div>
+                <button onClick={() => setShowTerms(false)} className="p-2 bg-white border border-slate-200 rounded-full text-slate-500 hover:bg-slate-50 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-8 overflow-y-auto prose prose-slate max-w-none">
+                <section className="mb-8">
+                  <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <ShieldCheck size={20} className="text-blue-600" />
+                    1. The Escrow Payment System
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed text-sm">
+                    Ṣe Ṣe Wá Group Limited utilizes a secure Escrow system powered by Paystack. When you book a professional, your payment is held securely by our platform. 
+                    <strong> Funds are only released to the professional once you confirm the job is completed</strong> to your satisfaction. 
+                    This ensures that your money is safe and professionals are motivated to deliver high-quality work.
+                  </p>
+                </section>
+
+                <section className="mb-8">
+                  <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <AlertTriangle size={20} className="text-amber-600" />
+                    2. Dispute Resolution & Refunds
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed text-sm mb-3">
+                    In the event of a disagreement or incomplete service, users have <strong>48 hours</strong> from the scheduled completion time to raise a formal Dispute.
+                  </p>
+                  <ul className="list-disc pl-5 text-sm text-slate-600 space-y-2">
+                    <li><strong>Mediation:</strong> Our Admin team will review chat logs, photos, and job descriptions to mediate the dispute.</li>
+                    <li><strong>Refunds:</strong> If a dispute is resolved in favor of the customer, a full or partial refund will be processed back to the original payment method.</li>
+                    <li><strong>Finality:</strong> Admin decisions on disputes are final and binding for both parties using the platform.</li>
+                  </ul>
+                </section>
+
+                <section className="mb-8">
+                  <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <CheckCircle2 size={20} className="text-emerald-600" />
+                    3. Professional Conduct
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed text-sm">
+                    All professionals on Ṣe Ṣe Wá Group Limited agree to provide services with integrity. Misrepresentation of skills, harassment, or bypassing the platform's payment system to avoid fees will result in immediate and permanent account suspension.
+                  </p>
+                </section>
+
+                <section>
+                  <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <Lock size={20} className="text-slate-600" />
+                    4. Nigerian Law & Jurisdiction
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed text-sm">
+                    These terms are governed by the laws of the Federal Republic of Nigeria, including the Cybercrimes Act and relevant consumer protection regulations. Any legal proceedings shall be conducted in Nigerian courts.
+                  </p>
+                </section>
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button 
+                  onClick={() => setShowTerms(false)}
+                  className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all"
+                >
+                  I Understand
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Privacy Policy Modal */}
+      <AnimatePresence>
+        {showPrivacy && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPrivacy(false)}
+              className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className="relative w-full max-w-3xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900">Privacy Policy</h2>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter mt-1">NDPR Compliant • Data Protection Guaranteed</p>
+                </div>
+                <button onClick={() => setShowPrivacy(false)} className="p-2 bg-white border border-slate-200 rounded-full text-slate-500 hover:bg-slate-50 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="p-8 overflow-y-auto prose prose-slate max-w-none">
+                <section className="mb-8">
+                  <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <User size={20} className="text-blue-600" />
+                    1. Data We Collect
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed text-sm">
+                    In compliance with the <strong>Nigeria Data Protection Regulation (NDPR)</strong>, we collect only the information necessary to provide our services:
+                  </p>
+                  <ul className="list-disc pl-5 text-sm text-slate-600 mt-2 space-y-1">
+                    <li>Basic profile info (Name, Email, Phone)</li>
+                    <li>Location data (to find nearby pros)</li>
+                    <li>Government-issued ID documents (Professionals only)</li>
+                    <li>Transaction history and chat logs</li>
+                  </ul>
+                </section>
+
+                <section className="mb-8">
+                  <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <ShieldCheck size={20} className="text-emerald-600" />
+                    2. ID Verification & Security
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed text-sm">
+                    For professionals, we require a Government-issued ID to verify your identity. 
+                    <strong> These documents are stored in encrypted Firebase Storage and are used EXCLUSIVELY for the purpose of manual verification by our Admin team.</strong> 
+                    Once a professional is verified, the document is archived and is never shared with third parties or other users.
+                  </p>
+                </section>
+
+                <section className="mb-8">
+                  <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <Lock size={20} className="text-slate-600" />
+                    3. Data Retention & Your Rights
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed text-sm">
+                    You have the right to request access to your data, correction of errors, or deletion of your account. We retain data only as long as necessary to fulfill the purposes outlined or as required by Nigerian law.
+                  </p>
+                </section>
+
+                <section>
+                  <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                    <Mail size={20} className="text-blue-600" />
+                    4. Contact Our Data Protection Officer
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed text-sm">
+                    If you have questions about your data or wish to exercise your rights under the NDPR, please contact us at <strong>privacy@sesewa.app</strong>.
+                  </p>
+                </section>
+              </div>
+
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button 
+                  onClick={() => setShowPrivacy(false)}
+                  className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Notifications Modal/Drawer */}
+      <AnimatePresence>
+        {showNotifications && (
+          <div className="fixed inset-0 z-[100] flex items-start justify-end p-4 pointer-events-none">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowNotifications(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+            />
+            <motion.div 
+              initial={{ opacity: 0, x: 50, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 50, scale: 0.95 }}
+              className="relative w-full max-w-sm mt-16 pointer-events-auto"
+            >
+              <NotificationList 
+                notifications={notifications} 
+                onClose={() => setShowNotifications(false)}
+                onMarkRead={markNotificationAsRead}
+                setShowChatList={setShowChatList}
+                setShowRequests={setShowRequests}
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      </div>
+    </ErrorBoundary>
+  );
+}

@@ -1,0 +1,7 @@
+{
+  "name": "Ṣe Ṣe Wá",
+  "description": "A simple, standalone directory to find qualified handymen and mechanics across Nigeria.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
