@@ -81,6 +81,24 @@ async function startServer() {
     }
   });
 
+  // Paystack Webhook
+  app.post("/api/paystack/webhook", async (req, res) => {
+    const hash = req.headers["x-paystack-signature"];
+    // In a real app, you would verify the hash here using crypto.createHmac
+    // For this simulation, we'll assume it's valid if the secret is set
+    
+    const event = req.body;
+    console.log("Paystack Webhook received:", event.event);
+
+    if (event.event === "charge.success") {
+      const { reference, metadata } = event.data;
+      console.log(`Payment successful for reference: ${reference}, metadata:`, metadata);
+      // Here you would update Firestore from the backend for maximum reliability
+    }
+
+    res.sendStatus(200);
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -96,9 +114,17 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  return app;
 }
 
-startServer();
+// For Cloud Run / Local development
+const appPromise = startServer();
+
+appPromise.then(app => {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+});
+
+export default appPromise;

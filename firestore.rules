@@ -7,58 +7,32 @@ service cloud.firestore {
     // ===============================================================
     //
     // Collection: users
-    // Document ID: userId (UID)
-    // Fields:
-    //   - uid: string (required)
-    //   - name: string (required)
-    //   - email: string (required, email format)
-    //   - role: string (required, enum: user, handyman, admin)
-    //   - photoURL: string (optional)
-    //   - phone: string (optional)
-    //   - plan: string (optional, enum: basic, pro, member)
-    //   - credits: number (optional)
-    //   - isVerifiedPending: bool (optional)
-    //   - verified: bool (optional)
-    //   - idDocumentUrl: string (optional)
-    //   - createdAt: timestamp (optional)
+    // Document ID: {userId}
+    // Fields: uid, email, name, role, photoURL, phone, plan, credits, isVerifiedPending, verified, idDocumentUrl, createdAt, lat, lng
     //
     // Collection: handymen
-    // Document ID: handymanId
-    // Fields:
-    //   - id: string (required)
-    //   - name: string (required)
-    //   - category: string (required)
-    //   - location: string (required)
-    //   - lat: number (required)
-    //   - lng: number (required)
-    //   - rating: number (required)
-    //   - reviews: number (required)
-    //   - phone: string (required)
-    //   - userId: string (optional, UID)
-    //   ... (other fields)
+    // Document ID: {handymanId}
+    // Fields: id, name, category, location, lat, lng, rating, reviews, phone, whatsapp, experience, experienceYears, verified, isFeatured, isOnline, description, portfolio, profileImage, userId, availability, plan, ninVerified
     //
     // Collection: jobRequests
-    // Document ID: jobRequestId
-    // Fields:
-    //   - id: string (required)
-    //   - proId: string (required)
-    //   - userUid: string (required)
-    //   - status: string (required, enum)
-    //   - unlockedBy: list (optional)
-    //   ... (other fields)
+    // Document ID: {requestId}
+    // Fields: id, proId, proName, userUid, userName, userPhone, jobDescription, status, paymentStatus, amount, paystackReference, date, unlockedBy
     //
     // Collection: chats
-    // Document ID: chatId
-    // Fields:
-    //   - id: string (required)
-    //   - participants: list (required, UIDs)
+    // Document ID: {chatId}
+    // Fields: id, participants, lastMessage, lastMessageAt, updatedAt, otherParticipantName
+    //
+    // Collection: chats/{chatId}/messages
+    // Document ID: {messageId}
+    // Fields: id, chatId, senderId, text, createdAt
     //
     // Collection: notifications
-    // Document ID: notificationId
-    // Fields:
-    //   - id: string (required)
-    //   - userId: string (required, UID)
-    //   - read: bool (required)
+    // Document ID: {notificationId}
+    // Fields: id, userId, title, message, type, relatedId, read, createdAt
+    //
+    // Collection: disputes
+    // Document ID: {disputeId}
+    // Fields: id, jobRequestId, raisedBy, reason, status, createdAt, resolvedAt
     //
     // ===============================================================
 
@@ -77,7 +51,7 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() &&
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "yomz84.dm@gmail.com" && request.auth.token.email_verified == true));
+         (request.auth.token.email == "yomz84.dm@gmail.com" && request.auth.token.email_verified == true));
     }
 
     function hasRequiredFields(fields) {
@@ -92,121 +66,100 @@ service cloud.firestore {
       return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     }
 
-    function isValidUrl(url) {
-      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
-    }
-
     // ===============================================================
     // Domain Validators
     // ===============================================================
 
     function isValidUser(data) {
-      return hasRequiredFields(['uid', 'name', 'email', 'role']) &&
-        data.uid is string && data.uid.size() > 0 &&
-        data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-        isValidEmail(data.email) &&
-        data.role in ['user', 'handyman', 'admin'];
+      return hasRequiredFields(['uid', 'email', 'role']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.role in ['admin', 'user', 'handyman'];
     }
 
     function isValidHandyman(data) {
-      return hasRequiredFields(['id', 'name', 'category', 'location', 'lat', 'lng', 'rating', 'reviews', 'phone']) &&
-        data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-        data.category is string &&
-        data.lat is number && data.lng is number &&
-        data.rating is number && data.reviews is number;
+      return hasRequiredFields(['id', 'name', 'category', 'location', 'rating']) &&
+             data.id is string && data.name is string && data.rating is number;
     }
 
     function isValidJobRequest(data) {
-      return hasRequiredFields(['id', 'proId', 'proName', 'userUid', 'userName', 'jobDescription', 'status', 'date']) &&
-        data.userUid is string && data.proId is string &&
-        data.status in ['pending', 'responded', 'completed', 'cancelled'];
+      return hasRequiredFields(['id', 'proId', 'userUid', 'status']) &&
+             data.userUid == request.auth.uid &&
+             data.status in ['pending', 'responded', 'on-the-way', 'completed', 'cancelled'];
     }
 
     function isValidChat(data) {
       return hasRequiredFields(['id', 'participants', 'updatedAt']) &&
-        data.participants is list && data.participants.size() == 2;
+             request.auth.uid in data.participants;
     }
 
     function isValidMessage(data) {
       return hasRequiredFields(['id', 'chatId', 'senderId', 'text', 'createdAt']) &&
-        data.chatId is string && data.senderId == request.auth.uid &&
-        data.text is string && data.text.size() > 0 && data.text.size() < 5000;
+             data.senderId == request.auth.uid;
     }
 
     function isValidNotification(data) {
-      return hasRequiredFields(['id', 'userId', 'title', 'message', 'type', 'read', 'createdAt']) &&
-        data.userId is string && data.read is bool;
+      return hasRequiredFields(['id', 'userId', 'title', 'message', 'read', 'createdAt']) &&
+             data.userId is string;
+    }
+
+    function isValidDispute(data) {
+      return hasRequiredFields(['id', 'jobRequestId', 'raisedBy', 'status', 'createdAt']) &&
+             data.raisedBy == request.auth.uid;
     }
 
     // ===============================================================
     // Rules
     // ===============================================================
 
-    // Default deny
-    match /{path=**} {
-      allow read, write: if false;
-    }
-
-    // Users Collection
     match /users/{userId} {
-      // PII Protection: Only owner can read their own profile
       allow read: if isOwner(userId) || isAdmin();
-      
-      // Create: User can create their own profile. Role must be 'user' or 'handyman' unless admin.
-      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
-        (request.resource.data.role != 'admin' || isAdmin());
-      
-      // Update: User can update their own profile. Cannot change role to admin.
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
-        (request.resource.data.role == resource.data.role || isAdmin());
+      allow create: if isAuthenticated() && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
     }
 
-    // Handymen Collection
     match /handymen/{handymanId} {
-      // Publicly readable profiles
       allow read: if true;
-      
-      // Create: Only authenticated users can create a handyman profile. 
-      // If userId is provided, it must match the creator.
-      allow create: if isAuthenticated() && isValidHandyman(request.resource.data) &&
-        (!('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid);
-      
-      // Update: Only owner or admin can update.
-      allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create, update: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.userId);
+      allow create: if isAuthenticated() && isValidHandyman(request.resource.data);
+      allow delete: if isAdmin();
     }
 
-    // Job Requests Collection
-    match /jobRequests/{jobRequestId} {
-      // Only participants (user or handyman) can read
+    match /jobRequests/{requestId} {
       allow read: if isAuthenticated() && (request.auth.uid == resource.data.userUid || request.auth.uid == resource.data.proId || isAdmin());
-      
-      // Create: User can create a job request
-      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userUid && isValidJobRequest(request.resource.data);
-      
-      // Update: Participants can update status or unlockedBy
+      allow create: if isAuthenticated() && isValidJobRequest(request.resource.data);
       allow update: if isAuthenticated() && (request.auth.uid == resource.data.userUid || request.auth.uid == resource.data.proId || isAdmin());
+      allow delete: if isAdmin();
     }
 
-    // Chats Collection
     match /chats/{chatId} {
-      // Only participants can read/write
       allow read: if isAuthenticated() && (request.auth.uid in resource.data.participants || isAdmin());
-      allow create: if isAuthenticated() && request.auth.uid in request.resource.data.participants && isValidChat(request.resource.data);
-      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants && isValidChat(request.resource.data);
-
-      // Messages Subcollection
+      allow create: if isAuthenticated() && isValidChat(request.resource.data);
+      allow update: if isAuthenticated() && (request.auth.uid in resource.data.participants || isAdmin());
+      
       match /messages/{messageId} {
-        allow read: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
-        allow create: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants) && isValidMessage(request.resource.data);
+        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]) || isAdmin());
+        allow create: if isAuthenticated() && isValidMessage(request.resource.data);
       }
     }
 
-    // Notifications Collection
     match /notifications/{notificationId} {
-      allow read: if isOwner(resource.data.userId) || isAdmin();
-      allow create: if isAuthenticated() && isValidNotification(request.resource.data); // System or other users can create notifications
-      allow update: if isOwner(resource.data.userId) && isValidNotification(request.resource.data);
-      allow delete: if isOwner(resource.data.userId);
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if isAuthenticated() && isValidNotification(request.resource.data);
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+    }
+
+    match /disputes/{disputeId} {
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.raisedBy);
+      allow create: if isAuthenticated() && isValidDispute(request.resource.data);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
     }
   }
 }

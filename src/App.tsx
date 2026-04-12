@@ -5,7 +5,7 @@
 
 import * as React from 'react';
 import axios from 'axios';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Search, 
   MapPin, 
@@ -46,11 +46,21 @@ import {
   AlertCircle,
   AlertTriangle,
   Upload,
+  Camera,
   Mail,
   Lock,
   Bell,
   TrendingUp,
-  RotateCcw
+  RotateCcw,
+  Globe,
+  Hand,
+  Footprints,
+  Sprout,
+  Leaf,
+  PenTool,
+  Battery,
+  Waves,
+  Radio
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -80,8 +90,10 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from './firebase';
+import { geminiService } from './services/geminiService';
 
 import { Logo } from './components/Logo';
+import { t } from './translations';
 
 // --- Error Handling ---
 enum OperationType {
@@ -233,6 +245,8 @@ interface AppUser {
   verified?: boolean;
   idDocumentUrl?: string;
   createdAt?: any;
+  lat?: number;
+  lng?: number;
 }
 
 interface JobRequest {
@@ -243,7 +257,7 @@ interface JobRequest {
   userName: string;
   userPhone?: string;
   jobDescription: string;
-  status: 'pending' | 'responded' | 'completed' | 'cancelled';
+  status: 'pending' | 'responded' | 'on-the-way' | 'completed' | 'cancelled';
   paymentStatus?: 'none' | 'pending' | 'escrowed' | 'released' | 'refunded' | 'disputed';
   amount?: number;
   paystackReference?: string;
@@ -275,7 +289,7 @@ interface Notification {
 interface Handyman {
   id: string;
   name: string;
-  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services';
+  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services' | 'Manicure' | 'Pedicure' | 'Hairstylist' | 'Barber' | 'Horticulturist' | 'Tattoo artist' | 'Generator Repair' | 'Satellite Installer';
   location: string;
   lat: number;
   lng: number;
@@ -294,6 +308,7 @@ interface Handyman {
   userId?: string;
   availability?: 'Available' | 'Busy' | 'Away';
   plan?: 'basic' | 'pro';
+  ninVerified?: boolean;
 }
 
 // --- Mock Data ---
@@ -312,6 +327,7 @@ const INITIAL_HANDYMEN: Handyman[] = [
     experience: '10 years',
     experienceYears: 10,
     verified: true,
+    ninVerified: true,
     isFeatured: true,
     isOnline: true,
     description: 'Specialist in modern bathroom fittings and industrial piping. Available for emergency leaks 24/7.',
@@ -514,6 +530,195 @@ const INITIAL_HANDYMEN: Handyman[] = [
     portfolio: ['https://loremflickr.com/400/300/car,service', 'https://loremflickr.com/400/300/auto,repair'],
     plan: 'pro'
   },
+  {
+    id: '13',
+    name: 'Sarah Johnson',
+    category: 'Manicure',
+    location: 'Surulere, Lagos',
+    lat: 6.5000,
+    lng: 3.3500,
+    rating: 4.9,
+    reviews: 45,
+    phone: '08099887766',
+    experience: '5 years',
+    experienceYears: 5,
+    verified: true,
+    isOnline: true,
+    description: 'Expert in gel polish, acrylics, and nail art. Clean and professional service.',
+    portfolio: ['https://loremflickr.com/400/300/nails,manicure', 'https://loremflickr.com/400/300/nailart'],
+  },
+  {
+    id: '14',
+    name: 'Grace Udoh',
+    category: 'Pedicure',
+    location: 'Ikeja, Lagos',
+    lat: 6.5967,
+    lng: 3.3421,
+    rating: 4.8,
+    reviews: 32,
+    phone: '08122334455',
+    experience: '4 years',
+    experienceYears: 4,
+    verified: true,
+    isOnline: true,
+    description: 'Professional pedicure and foot spa. Relaxing and hygienic treatment.',
+    portfolio: ['https://loremflickr.com/400/300/pedicure,feet', 'https://loremflickr.com/400/300/spa,feet'],
+  },
+  {
+    id: '15',
+    name: 'David Okeke',
+    category: 'Barber',
+    location: 'Enugu City, Enugu',
+    lat: 6.4413,
+    lng: 7.4988,
+    rating: 4.7,
+    reviews: 89,
+    phone: '09033445566',
+    experience: '8 years',
+    experienceYears: 8,
+    verified: true,
+    isOnline: true,
+    description: 'Master barber for all hair types. Clean fades and sharp outlines.',
+    portfolio: ['https://loremflickr.com/400/300/barber,haircut', 'https://loremflickr.com/400/300/fade,hair'],
+  },
+  {
+    id: '16',
+    name: 'Aisha Mohammed',
+    category: 'Hairstylist',
+    location: 'Maitama, Abuja',
+    lat: 9.0765,
+    lng: 7.4985,
+    rating: 4.9,
+    reviews: 120,
+    phone: '08011223344',
+    experience: '10 years',
+    experienceYears: 10,
+    verified: true,
+    isOnline: true,
+    description: 'Specialist in braids, wigs, and natural hair care. Home service available.',
+    portfolio: ['https://loremflickr.com/400/300/hair,braids', 'https://loremflickr.com/400/300/wig,styling'],
+  },
+  {
+    id: '17',
+    name: 'Babatunde Ojo',
+    category: 'Horticulturist',
+    location: 'Ikeja, Lagos',
+    lat: 6.5967,
+    lng: 3.3421,
+    rating: 4.8,
+    reviews: 27,
+    phone: '08133445566',
+    experience: '12 years',
+    experienceYears: 12,
+    verified: true,
+    isOnline: true,
+    description: 'Professional landscaping and garden maintenance. Specialist in tropical plants and lawn care.',
+    portfolio: ['https://loremflickr.com/400/300/garden,flowers', 'https://loremflickr.com/400/300/landscape,plants'],
+  },
+  {
+    id: '18',
+    name: 'Linda Eze',
+    category: 'Manicure',
+    location: 'Enugu City, Enugu',
+    lat: 6.4413,
+    lng: 7.4988,
+    rating: 4.7,
+    reviews: 18,
+    phone: '08022334455',
+    experience: '3 years',
+    experienceYears: 3,
+    verified: false,
+    isOnline: true,
+    description: 'Mobile nail technician specializing in acrylic extensions and luxury manicures.',
+    portfolio: ['https://loremflickr.com/400/300/nails,acrylic', 'https://loremflickr.com/400/300/manicure,luxury'],
+  },
+  {
+    id: '19',
+    name: 'Segun Barber',
+    category: 'Barber',
+    location: 'Ibadan, Oyo',
+    lat: 7.3775,
+    lng: 3.9470,
+    rating: 4.6,
+    reviews: 54,
+    phone: '08155667788',
+    experience: '15 years',
+    experienceYears: 15,
+    verified: true,
+    isOnline: true,
+    description: 'Veteran barber with expertise in all traditional and modern cuts. Home service available.',
+    portfolio: ['https://loremflickr.com/400/300/barber,shop', 'https://loremflickr.com/400/300/haircut,sharp'],
+  },
+  {
+    id: '20',
+    name: 'Kemi Braids',
+    category: 'Hairstylist',
+    location: 'Lekki, Lagos',
+    lat: 6.4478,
+    lng: 3.4723,
+    rating: 4.9,
+    reviews: 76,
+    phone: '07033445566',
+    experience: '7 years',
+    experienceYears: 7,
+    verified: true,
+    isOnline: true,
+    description: 'Specialist in knotless braids, cornrows, and hair extensions. Fast and neat.',
+    portfolio: ['https://loremflickr.com/400/300/braids,knotless', 'https://loremflickr.com/400/300/hair,styling'],
+  },
+  {
+    id: '21',
+    name: 'Obinna Tattoos',
+    category: 'Tattoo artist',
+    location: 'Surulere, Lagos',
+    lat: 6.5000,
+    lng: 3.3500,
+    rating: 4.9,
+    reviews: 42,
+    phone: '08011223344',
+    whatsapp: '2348011223344',
+    experience: '6 years',
+    experienceYears: 6,
+    verified: true,
+    isOnline: true,
+    description: 'Professional tattoo artist specializing in realism, traditional African patterns, and fine line work. Sterile and safe environment.',
+    portfolio: ['https://loremflickr.com/400/300/tattoo,ink', 'https://loremflickr.com/400/300/tattoo,art'],
+    plan: 'pro'
+  },
+  {
+    id: '22',
+    name: 'Chinedu Obi',
+    category: 'Generator Repair',
+    location: 'Lekki Phase 1, Lagos',
+    lat: 6.4483,
+    lng: 3.4767,
+    rating: 4.8,
+    reviews: 56,
+    phone: '08022334455',
+    experience: '6 years',
+    experienceYears: 6,
+    verified: true,
+    isOnline: true,
+    description: 'Expert in Mikano, Perkins, and Tiger generators. Quick response and reliable service.',
+    portfolio: ['https://loremflickr.com/400/300/generator,engine', 'https://loremflickr.com/400/300/repair,tool'],
+  },
+  {
+    id: '23',
+    name: 'Suleiman Danjuma',
+    category: 'Satellite Installer',
+    location: 'Gwarinpa, Abuja',
+    lat: 9.1000,
+    lng: 7.4000,
+    rating: 4.7,
+    reviews: 42,
+    phone: '08133445566',
+    experience: '5 years',
+    experienceYears: 5,
+    verified: true,
+    isOnline: true,
+    description: 'Professional installation of DSTV, GOTV, and StarTimes. Signal optimization and mounting.',
+    portfolio: ['https://loremflickr.com/400/300/satellite,dish', 'https://loremflickr.com/400/300/antenna,tv'],
+  }
 ];
 
 interface PricingPlan {
@@ -544,7 +749,7 @@ const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'credits-1',
     name: 'Single Lead',
-    price: '₦500',
+    price: '₦1,000',
     period: 'one-time',
     features: [
       '1 Credit',
@@ -556,12 +761,12 @@ const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'credits-10',
     name: 'Starter Pack',
-    price: '₦4,000',
+    price: '₦7,500',
     period: 'one-time',
     features: [
       '10 Credits',
       'Unlock 10 Leads',
-      'Save ₦1,000',
+      'Save ₦2,500',
       'No Expiry'
     ],
     buttonText: 'Buy 10 Credits'
@@ -569,12 +774,12 @@ const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'credits-50',
     name: 'Growth Pack',
-    price: '₦15,000',
+    price: '₦30,000',
     period: 'one-time',
     features: [
       '50 Credits',
       'Unlock 50 Leads',
-      'Save ₦10,000',
+      'Save ₦20,000',
       'Priority Support',
       'No Expiry'
     ],
@@ -583,7 +788,7 @@ const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'pro',
     name: 'Featured Pro',
-    price: '₦2,500',
+    price: '₦10,000',
     period: 'per month',
     features: [
       'Featured Badge',
@@ -598,7 +803,7 @@ const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'member',
     name: 'Customer Member',
-    price: '₦1,000',
+    price: '₦2,500',
     period: 'per month',
     features: [
       'Access Verified Pros Only',
@@ -612,14 +817,15 @@ const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'enterprise',
     name: 'Agency',
-    price: '₦7,500',
+    price: '₦50,000',
     period: 'per month',
     features: [
-      'Up to 5 Team Members',
+      'Up to 10 Team Members',
       'Advanced SEO Optimization',
       'Dedicated Account Manager',
       'Custom Portfolio URL',
-      'Bulk SMS Marketing'
+      'Bulk SMS Marketing',
+      'Unlimited Lead Unlocks'
     ],
     buttonText: 'Contact Sales'
   }
@@ -639,9 +845,37 @@ const CATEGORIES = [
   { name: 'Tailor', icon: Scissors },
   { name: 'Bricklayer', icon: LayoutGrid },
   { name: 'General Repairs', icon: Wrench },
+  { name: 'Manicure', icon: Hand },
+  { name: 'Pedicure', icon: Footprints },
+  { name: 'Hairstylist', icon: Scissors },
+  { name: 'Barber', icon: Scissors },
+  { name: 'Horticulturist', icon: Sprout },
+  { name: 'Tattoo artist', icon: PenTool },
+  { name: 'Generator Repair', icon: Zap },
+  { name: 'Inverter Specialist', icon: Battery },
+  { name: 'Borehole Driller', icon: Waves },
+  { name: 'Satellite Installer', icon: Radio },
 ];
 
+import { Toaster, toast } from 'sonner';
+
 // --- Helpers ---
+function deg2rad(deg: number) {
+  return deg * (Math.PI / 180);
+}
+
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c; // Distance in km
+  return d;
+}
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371; // km
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -679,7 +913,7 @@ const StarRating = ({ rating, onRate, interactive = false }: { rating: number, o
   );
 };
 
-const SimulatedCheckout = ({ plan, onClose, onComplete }: { plan: PricingPlan, onClose: () => void, onComplete: () => void }) => {
+const SimulatedCheckout = ({ plan, onClose, onComplete, lang }: { plan: PricingPlan, onClose: () => void, onComplete: () => void, lang: string }) => {
   const [step, setStep] = useState<'options' | 'processing' | 'success'>('options');
   const [method, setMethod] = useState<'card' | 'transfer' | 'ussd'>('card');
 
@@ -776,6 +1010,8 @@ const SimulatedCheckout = ({ plan, onClose, onComplete }: { plan: PricingPlan, o
             >
               Pay {plan.price}
             </button>
+
+            <PaystackBankTransferGuide lang={lang} />
             
             <div className="mt-6 flex items-center justify-center gap-2 text-slate-400 text-xs font-medium">
               <ShieldCheck size={14} className="text-emerald-500" />
@@ -1012,12 +1248,192 @@ const ChatWindow = ({
           />
           <button 
             type="submit"
-            className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+            className="bg-blue-600 text-white px-4 py-3 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center gap-2"
           >
+            <span className="hidden sm:inline font-bold">Send</span>
             <Send size={20} />
           </button>
         </div>
       </form>
+    </div>
+  );
+};
+
+const SafetyTips = ({ lang }: { lang: string }) => {
+  const tips = [
+    {
+      title: lang === 'Pidgin' ? 'Verify Oga' : 'Verify Identity',
+      desc: lang === 'Pidgin' ? 'Check if dem get verified badge before you call dem.' : 'Always check for the verified badge on a professional\'s profile.'
+    },
+    {
+      title: lang === 'Pidgin' ? 'No pay first' : 'Use Escrow',
+      desc: lang === 'Pidgin' ? 'No pay full money until work finish. Use our escrow system.' : 'Never pay the full amount upfront. Use our secure escrow system.'
+    },
+    {
+      title: lang === 'Pidgin' ? 'Meet for public' : 'Public Meetings',
+      desc: lang === 'Pidgin' ? 'If dem need come your house, make sure person dey around.' : 'If meeting for the first time, try to meet in a public place or ensure someone is with you.'
+    },
+    {
+      title: lang === 'Pidgin' ? 'Check work' : 'Inspect Work',
+      desc: lang === 'Pidgin' ? 'Check the work well well before you release money.' : 'Thoroughly inspect the completed work before releasing funds from escrow.'
+    }
+  ];
+
+  return (
+    <div className="bg-amber-50 border border-amber-100 rounded-3xl p-6 mb-8">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 bg-amber-100 text-amber-600 rounded-xl">
+          <ShieldCheck size={24} />
+        </div>
+        <h3 className="text-lg font-bold text-amber-900">{t('Safety Tips', lang)}</h3>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {tips.map((tip, idx) => (
+          <div key={idx} className="flex gap-3">
+            <div className="mt-1">
+              <div className="w-5 h-5 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-[10px] font-bold">
+                {idx + 1}
+              </div>
+            </div>
+            <div>
+              <div className="font-bold text-amber-900 text-sm">{tip.title}</div>
+              <div className="text-amber-700 text-xs leading-relaxed">{tip.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const VoiceWelcome = ({ lang }: { lang: string }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+
+  const handlePlay = async () => {
+    if (isPlaying) {
+      if (sourceNodeRef.current) {
+        sourceNodeRef.current.stop();
+      }
+      setIsPlaying(false);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const base64Audio = await geminiService.speakWelcome(lang);
+      if (!base64Audio) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Initialize AudioContext on user gesture
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: 24000
+        });
+      }
+
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      // Decode base64 to ArrayBuffer
+      const binaryString = atob(base64Audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Convert Int16 PCM to Float32
+      const int16Data = new Int16Array(bytes.buffer);
+      const float32Data = new Float32Array(int16Data.length);
+      for (let i = 0; i < int16Data.length; i++) {
+        float32Data[i] = int16Data[i] / 32768.0;
+      }
+
+      // Create AudioBuffer
+      const audioBuffer = ctx.createBuffer(1, float32Data.length, 24000);
+      audioBuffer.getChannelData(0).set(float32Data);
+
+      // Play
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.onended = () => setIsPlaying(false);
+      sourceNodeRef.current = source;
+      
+      setIsLoading(false);
+      setIsPlaying(true);
+      source.start();
+    } catch (error) {
+      console.error("Voice Welcome Error:", error);
+      setIsLoading(false);
+      setIsPlaying(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (sourceNodeRef.current) {
+        sourceNodeRef.current.stop();
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  return (
+    <div className="flex items-center gap-3">
+      <button 
+        onClick={handlePlay}
+        disabled={isLoading}
+        className={`p-3 rounded-full transition-all flex items-center gap-2 ${
+          isPlaying 
+            ? 'bg-blue-100 text-blue-600' 
+            : isLoading
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20'
+        }`}
+        title={isPlaying ? "Stop Welcome Message" : "Listen to Welcome Message"}
+      >
+        {isLoading ? (
+          <>
+            <RotateCcw className="animate-spin" size={18} />
+            <span className="text-xs font-bold">Translating...</span>
+          </>
+        ) : isPlaying ? (
+          <>
+            <RotateCcw className="animate-spin" size={18} />
+            <span className="text-xs font-bold">Playing...</span>
+          </>
+        ) : (
+          <>
+            <Radio size={18} />
+            <span className="text-xs font-bold">Listen in {lang}</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+};
+
+const PaystackBankTransferGuide = ({ lang }: { lang: string }) => {
+  return (
+    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mt-4 text-left">
+      <div className="flex items-center gap-2 mb-2">
+        <CreditCard size={16} className="text-blue-600" />
+        <h4 className="font-bold text-blue-900 text-sm">Paying via Bank Transfer?</h4>
+      </div>
+      <p className="text-xs text-blue-700 leading-relaxed">
+        {lang === 'Pidgin' 
+          ? 'If you wan pay with bank transfer, just select "Transfer" inside Paystack window. E easy well well!'
+          : 'When the Paystack window opens, select "Transfer" to get a temporary bank account number for this payment.'}
+      </p>
     </div>
   );
 };
@@ -1070,9 +1486,137 @@ export default function App() {
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
 
-  // Local Storage Persistence
+  // --- AI States ---
+  const [aiMatchedProIds, setAiMatchedProIds] = useState<string[]>([]);
+  const [isAiMatching, setIsAiMatching] = useState(false);
+  const [isAiRefining, setIsAiRefining] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [isAiSummarizing, setIsAiSummarizing] = useState(false);
+  const [aiDiagnosis, setAiDiagnosis] = useState<any>(null);
+  const [isAiDiagnosing, setIsAiDiagnosing] = useState(false);
+  const [handyPadiOpen, setHandyPadiOpen] = useState(false);
+  const [handyPadiMessages, setHandyPadiMessages] = useState<{ role: 'user' | 'bot', text: string }[]>([]);
+  const [handyPadiInput, setHandyPadiInput] = useState('');
+  const [isHandyPadiTyping, setIsHandyPadiTyping] = useState(false);
+  const [jobDescriptionInput, setJobDescriptionInput] = useState('');
+  const [currentLanguage, setCurrentLanguage] = useState('English');
+  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const languageMenuRef = useRef<HTMLDivElement>(null);
+  const mobileLanguageMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      const isHeaderMenu = languageMenuRef.current && languageMenuRef.current.contains(target);
+      const isMobileMenu = mobileLanguageMenuRef.current && mobileLanguageMenuRef.current.contains(target);
+      
+      if (!isHeaderMenu && !isMobileMenu) {
+        setShowLanguageMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  const languages = [
+    'English', 'Pidgin', 'Yoruba', 'Hausa', 'Igbo', 'Edo', 
+    'Tiv', 'Ibibio', 'Kanuri', 'Fulfulde', 'Efik', 
+    'Itsekiri', 'Urhobo', 'Izon', 'Nupe', 'Igala', 'Idoma'
+  ];
+
   const [handymen, setHandymen] = useState<Handyman[]>(INITIAL_HANDYMEN);
 
+  // Geolocation Tracking
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      console.error('Geolocation is not supported by your browser');
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation({ lat: latitude, lng: longitude });
+
+        if (currentUser) {
+          // Update user's location in Firestore
+          try {
+            await updateDoc(doc(db, 'users', currentUser.uid), {
+              lat: latitude,
+              lng: longitude,
+              lastLocationUpdate: serverTimestamp()
+            });
+
+            // If user is a handyman, update their professional record too
+            const proRecord = handymen.find(h => h.userId === currentUser.uid);
+            if (proRecord) {
+              await updateDoc(doc(db, 'handymen', proRecord.id), {
+                lat: latitude,
+                lng: longitude
+              });
+            }
+          } catch (error) {
+            console.error('Error updating location in Firestore:', error);
+          }
+        }
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [currentUser?.uid, handymen]);
+
+  // Arrival Notifications
+  useEffect(() => {
+    if (!currentUser || !userLocation) return;
+
+    // Listen for active job requests where the pro is "on-the-way"
+    const q = query(
+      collection(db, 'jobRequests'),
+      where('userUid', '==', currentUser.uid),
+      where('status', '==', 'on-the-way')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docs.forEach(async (docSnapshot) => {
+        const request = docSnapshot.data() as JobRequest;
+        const pro = handymen.find(h => h.id === request.proId);
+        
+        if (pro && pro.lat && pro.lng) {
+          const distance = getDistance(userLocation.lat, userLocation.lng, pro.lat, pro.lng);
+          
+          // If less than 200 meters, notify
+          if (distance < 0.2) {
+            const notificationId = `arrival-${request.id}`;
+            // Check if we already notified for this request
+            if (!notifications.some(n => n.id === notificationId)) {
+              const newNotification: Notification = {
+                id: notificationId,
+                userId: currentUser.uid,
+                title: 'Professional Arriving!',
+                message: `${pro.name} is arriving at your location.`,
+                type: 'job_status',
+                read: false,
+                createdAt: new Date().toISOString()
+              };
+              
+              setNotifications(prev => [newNotification, ...prev]);
+              toast.info(`${pro.name} is arriving!`, {
+                description: 'They are very close to your location.',
+                icon: <MapPin className="text-blue-500" />
+              });
+            }
+          }
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [currentUser?.uid, userLocation, handymen, notifications]);
+
+  // Local Storage Persistence
   const myProProfile = useMemo(() => {
     if (!currentUser) return null;
     return handymen.find(h => h.userId === currentUser.uid);
@@ -1094,18 +1638,22 @@ export default function App() {
     // Fetch all handymen from Firestore
     const handymenQuery = query(collection(db, 'handymen'), orderBy('rating', 'desc'));
     const unsubscribeHandymen = onSnapshot(handymenQuery, async (snapshot) => {
-      if (snapshot.empty) {
-        // Seed initial data if collection is empty
-        for (const pro of INITIAL_HANDYMEN) {
-          await setDoc(doc(db, 'handymen', pro.id), pro);
-        }
-        return;
-      }
-      
       const dbHandymen = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Handyman[];
+
+      // Check for missing initial pros and seed them
+      const existingIds = new Set(dbHandymen.map(h => h.id));
+      const missingPros = INITIAL_HANDYMEN.filter(pro => !existingIds.has(pro.id));
+      
+      if (missingPros.length > 0) {
+        console.log(`Seeding ${missingPros.length} missing professionals...`);
+        for (const pro of missingPros) {
+          await setDoc(doc(db, 'handymen', pro.id), pro);
+        }
+        // The next snapshot will include these new pros
+      }
       
       setHandymen(dbHandymen);
     }, (error) => {
@@ -1425,7 +1973,7 @@ export default function App() {
 
     const q = query(
       collection(db, 'jobRequests'),
-      where(currentUser.role === 'handyman' ? 'proId' : 'userName', '==', currentUser.role === 'handyman' ? currentUser.uid : currentUser.name),
+      where(currentUser.role === 'handyman' ? 'proId' : 'userUid', '==', currentUser.uid),
       orderBy('date', 'desc')
     );
 
@@ -1972,7 +2520,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateJobStatus = async (req: JobRequest, newStatus: 'pending' | 'responded' | 'completed') => {
+  const handleUpdateJobStatus = async (req: JobRequest, newStatus: 'pending' | 'responded' | 'on-the-way' | 'completed') => {
     try {
       await updateDoc(doc(db, 'jobRequests', req.id), { status: newStatus });
       
@@ -1988,6 +2536,142 @@ export default function App() {
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'jobRequests');
+    }
+  };
+
+  const handleHandyPadiSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!handyPadiInput.trim()) return;
+
+    const userMsg = { role: 'user' as const, text: handyPadiInput };
+    setHandyPadiMessages(prev => [...prev, userMsg]);
+    setHandyPadiInput('');
+    setIsHandyPadiTyping(true);
+
+    try {
+      const response = await geminiService.handyPadiChat(userMsg.text, handyPadiMessages, currentLanguage);
+      setHandyPadiMessages(prev => [...prev, { role: 'bot' as const, text: response || "I'm sorry, I couldn't process that." }]);
+    } catch (error) {
+      console.error("HandyPadi Error:", error);
+    } finally {
+      setIsHandyPadiTyping(false);
+    }
+  };
+
+  const [isTranslating, setIsTranslating] = useState<string | null>(null);
+  const handleTranslate = async (text: string, id: string) => {
+    setIsTranslating(id);
+    try {
+      const translated = await geminiService.translateText(text, currentLanguage);
+      // We'll just show it as an alert for now, or we could update the local state
+      alert(`Translated to ${currentLanguage}:\n\n${translated}`);
+    } catch (error) {
+      console.error("Translation Error:", error);
+    } finally {
+      setIsTranslating(null);
+    }
+  };
+
+  // Auto-translate AI messages when language changes
+  useEffect(() => {
+    if (currentLanguage === 'English') return;
+
+    const translateAiContent = async () => {
+      // Translate AI Diagnosis if exists
+      if (aiDiagnosis && !aiDiagnosis.includes('(')) { // Simple check to avoid re-translating
+        try {
+          const translated = await geminiService.translateText(aiDiagnosis, currentLanguage);
+          setAiDiagnosis(translated);
+        } catch (error) {
+          console.error('Failed to auto-translate AI diagnosis:', error);
+        }
+      }
+
+      // Translate HandyPadi messages if they are from AI
+      const lastMessage = handyPadiMessages[handyPadiMessages.length - 1];
+      if (lastMessage && lastMessage.role === 'bot' && !lastMessage.text.includes('(')) {
+        try {
+          const translated = await geminiService.translateText(lastMessage.text, currentLanguage);
+          setHandyPadiMessages(prev => prev.map((msg, idx) => 
+            idx === prev.length - 1 ? { ...msg, text: translated } : msg
+          ));
+        } catch (error) {
+          console.error('Failed to auto-translate HandyPadi message:', error);
+        }
+      }
+    };
+
+    translateAiContent();
+  }, [currentLanguage]);
+
+  const handleSmartMatch = async (query: string) => {
+    if (query.length < 10) {
+      setAiMatchedProIds([]);
+      return;
+    }
+    setIsAiMatching(true);
+    try {
+      const matchedIds = await geminiService.matchHandymen(query, handymen);
+      setAiMatchedProIds(matchedIds);
+    } catch (error) {
+      console.error("Smart Match Error:", error);
+    } finally {
+      setIsAiMatching(false);
+    }
+  };
+
+  const handleRefineDescription = async (desc: string, setDesc: (v: string) => void) => {
+    if (!desc.trim()) return;
+    setIsAiRefining(true);
+    try {
+      const result = await geminiService.refineJobDescription(desc);
+      if (result && result.isRefined) {
+        setDesc(result.content);
+      } else if (result) {
+        alert(result.content);
+      }
+    } catch (error) {
+      console.error("Refine Description Error:", error);
+    } finally {
+      setIsAiRefining(false);
+    }
+  };
+
+  const handleSummarizeReviews = async (proId: string) => {
+    const proReviews = reviews.filter(r => r.proId === proId);
+    if (proReviews.length === 0) return;
+    setIsAiSummarizing(true);
+    try {
+      const summary = await geminiService.summarizeReviews(proReviews);
+      setAiSummary(summary || null);
+    } catch (error) {
+      console.error("Summarize Reviews Error:", error);
+    } finally {
+      setIsAiSummarizing(false);
+    }
+  };
+
+  const handleDiagnoseImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsAiDiagnosing(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const result = await geminiService.analyzeIssueImage(base64, file.type);
+        setAiDiagnosis(result);
+        if (result?.suggestedCategory) {
+          setSelectedCategory(result.suggestedCategory);
+          setSearchQuery(result.issue);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error("Diagnose Image Error:", error);
+    } finally {
+      setIsAiDiagnosing(false);
     }
   };
 
@@ -2126,7 +2810,7 @@ export default function App() {
                 onClick={() => setShowBrandPreview(false)}
                 className="mt-12 px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all"
               >
-                Back to App
+                {t('Back to App', currentLanguage)}
               </button>
             </motion.div>
           </div>
@@ -2141,35 +2825,16 @@ export default function App() {
             onClick={handleGoHome}
             title="Go to Home"
           >
-            <div className="flex items-center justify-center">
+            <div className="flex items-center justify-center gap-3">
               <Logo className="w-10 h-10" />
+              <div className="hidden sm:flex flex-col leading-tight">
+                <span className="font-black text-lg tracking-tighter text-blue-600">Ṣe Ṣe Wá</span>
+                <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">HandyPadi</span>
+              </div>
+              <VoiceWelcome lang={currentLanguage} />
             </div>
           </div>
-          <div className="flex items-center gap-1 sm:gap-3 overflow-x-auto no-scrollbar py-1 min-w-0">
-            {currentUser?.role === 'handyman' && (
-              <button 
-                onClick={() => setShowPricing(true)}
-                className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold border border-blue-100 hover:bg-blue-100 transition-colors shrink-0"
-              >
-                <CreditCard size={14} />
-                <span>{currentUser.credits || 0} Credits</span>
-              </button>
-            )}
-            {currentUser && (
-              <div className="relative shrink-0">
-                <button 
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className={`p-2 rounded-full transition-colors relative ${
-                    showNotifications ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Bell size={18} className="sm:w-[20px] sm:h-[20px]" />
-                  {notifications.filter(n => !n.read).length > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
-                  )}
-                </button>
-              </div>
-            )}
+          <div className="flex items-center gap-1 sm:gap-3 overflow-x-auto no-scrollbar py-1 flex-1 min-w-0">
             {isAdmin && (
               <button 
                 onClick={() => {
@@ -2183,7 +2848,7 @@ export default function App() {
                 }`}
               >
                 <ShieldCheck size={18} />
-                <span className="hidden lg:inline">Admin</span>
+                <span className="hidden lg:inline">{t('Admin', currentLanguage)}</span>
               </button>
             )}
             <button 
@@ -2191,13 +2856,14 @@ export default function App() {
                 setShowPricing(!showPricing);
                 setShowRequests(false);
                 setShowAdminDashboard(false);
+                setShowChatList(false);
               }}
               className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
                 showPricing ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <Zap size={18} />
-              <span className="hidden sm:inline">Pricing</span>
+              <span className="hidden sm:inline">{t('Pricing', currentLanguage)}</span>
             </button>
             <button 
               onClick={() => {
@@ -2211,7 +2877,7 @@ export default function App() {
               }`}
             >
               <Clock size={18} />
-              <span className="hidden lg:inline">My Requests</span>
+              <span className="hidden lg:inline">{t('My Requests', currentLanguage)}</span>
             </button>
             <button 
               onClick={() => {
@@ -2225,34 +2891,90 @@ export default function App() {
               }`}
             >
               <MessageCircle size={18} />
-              <span className="hidden lg:inline">Messages</span>
+              <span className="hidden lg:inline">{t('Messages', currentLanguage)}</span>
               {chats.length > 0 && (
                 <span className="bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
                   {chats.length}
                 </span>
               )}
             </button>
-            {currentUser && (
+          </div>
+
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0 ml-1">
+            <div className="relative hidden md:block" ref={languageMenuRef}>
               <button 
-                onClick={() => {
-                  if (myProProfile) {
-                    setShowEditProfile(!showEditProfile);
-                    setShowUserProfileModal(false);
-                  } else {
-                    setShowUserProfileModal(!showUserProfileModal);
-                    setShowEditProfile(false);
-                  }
-                  setShowRequests(false);
-                  setShowChatList(false);
-                  setShowAdminDashboard(false);
-                }}
-                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
-                  (showEditProfile || showUserProfileModal) ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+                className={`p-2 rounded-full transition-colors flex items-center gap-1 ${
+                  showLanguageMenu ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                <User size={18} />
-                <span className="hidden lg:inline">Profile</span>
+                <Globe size={18} />
+                <span className="text-xs font-bold hidden md:inline">{currentLanguage}</span>
               </button>
+              {showLanguageMenu && (
+                <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl py-2 w-40 z-50 max-h-64 overflow-y-auto custom-scrollbar">
+                  {languages.map(lang => (
+                    <button
+                      key={lang}
+                      onClick={() => {
+                        setCurrentLanguage(lang);
+                        setShowLanguageMenu(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-xs hover:bg-slate-50 transition-colors ${
+                        currentLanguage === lang ? 'text-blue-600 font-bold' : 'text-slate-600'
+                      }`}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {currentUser?.role === 'handyman' && (
+              <button 
+                onClick={() => setShowPricing(true)}
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold border border-blue-100 hover:bg-blue-100 transition-colors shrink-0"
+              >
+                <CreditCard size={14} />
+                <span>{currentUser.credits || 0}</span>
+              </button>
+            )}
+            {currentUser && (
+              <>
+                <div className="relative shrink-0">
+                  <button 
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className={`p-2 rounded-full transition-colors relative ${
+                      showNotifications ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Bell size={18} className="sm:w-[20px] sm:h-[20px]" />
+                    {notifications.filter(n => !n.read).length > 0 && (
+                      <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+                    )}
+                  </button>
+                </div>
+                <button 
+                  onClick={() => {
+                    if (myProProfile) {
+                      setShowEditProfile(!showEditProfile);
+                      setShowUserProfileModal(false);
+                    } else {
+                      setShowUserProfileModal(!showUserProfileModal);
+                      setShowEditProfile(false);
+                    }
+                    setShowRequests(false);
+                    setShowChatList(false);
+                    setShowAdminDashboard(false);
+                  }}
+                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
+                    (showEditProfile || showUserProfileModal) ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <User size={18} />
+                  <span className="hidden lg:inline">{t('Profile', currentLanguage)}</span>
+                </button>
+              </>
             )}
             {currentUser ? (
               <button 
@@ -2260,7 +2982,7 @@ export default function App() {
                 className="flex items-center gap-1 sm:gap-2 bg-slate-100 text-slate-600 px-2 sm:px-4 py-2 rounded-full text-sm font-medium hover:bg-slate-200 transition-colors shrink-0"
               >
                 <LogOut size={18} />
-                <span className="hidden lg:inline">Logout</span>
+                <span className="hidden lg:inline">{t('Logout', currentLanguage)}</span>
               </button>
             ) : (
               <button 
@@ -2268,7 +2990,7 @@ export default function App() {
                 className="flex items-center gap-1 sm:gap-2 bg-blue-600 text-white px-2 sm:px-4 py-2 rounded-full text-sm font-medium hover:bg-blue-700 transition-colors shrink-0"
               >
                 <LogIn size={18} />
-                <span className="hidden lg:inline">Login</span>
+                <span className="hidden lg:inline">{t('Login', currentLanguage)}</span>
               </button>
             )}
           </div>
@@ -2279,9 +3001,9 @@ export default function App() {
         {showPricing ? (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold mb-4">Grow Your Business</h2>
+              <h2 className="text-3xl font-bold mb-4">{t('Grow Your Business', currentLanguage)}</h2>
               <p className="text-slate-500 max-w-xl mx-auto">
-                Choose the plan that fits your professional needs. Get more visibility, more leads, and grow your reputation.
+                {t('Choose the plan that fits your professional needs. Get more visibility, more leads, and grow your reputation.', currentLanguage)}
               </p>
             </div>
 
@@ -2297,7 +3019,7 @@ export default function App() {
                 >
                   {plan.recommended && (
                     <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-bold uppercase px-4 py-1.5 rounded-full">
-                      Most Popular
+                      {t('Most Popular', currentLanguage)}
                     </span>
                   )}
                   
@@ -2360,9 +3082,9 @@ export default function App() {
               <h3 className="text-xl font-bold text-center mb-6">Need more leads? Buy Credit Packs</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
-                  { amount: 1, price: '₦500', label: 'Pay-per-Lead' },
-                  { amount: 10, price: '₦4,000', label: 'Starter Pack', popular: true },
-                  { amount: 50, price: '₦15,000', label: 'Growth Pack' }
+                  { amount: 1, price: '₦1,000', label: 'Pay-per-Lead' },
+                  { amount: 10, price: '₦7,500', label: 'Starter Pack', popular: true },
+                  { amount: 50, price: '₦30,000', label: 'Growth Pack' }
                 ].map((pack) => (
                   <button
                     key={pack.amount}
@@ -2450,7 +3172,7 @@ export default function App() {
                           };
                           input.click();
                         }}
-                        className="w-full py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors"
+                        className="w-full py-3 bg-slate-900 text-white text-xs font-bold rounded-2xl hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-900/10"
                       >
                         Apply for Verification
                       </button>
@@ -2504,13 +3226,23 @@ export default function App() {
                       </div>
                       <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
                         req.status === 'completed' ? 'bg-green-50 text-green-600' : 
+                        req.status === 'on-the-way' ? 'bg-indigo-50 text-indigo-600' :
                         req.status === 'responded' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'
                       }`}>
                         {req.status}
                       </span>
                     </div>
                     <div className="bg-slate-50 p-4 rounded-xl mb-4">
-                      <p className="text-slate-600 text-sm italic">"{req.jobDescription}"</p>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-slate-600 text-sm italic">"{req.jobDescription}"</p>
+                        <button 
+                          onClick={() => handleTranslate(req.jobDescription, req.id)}
+                          className="text-[10px] text-blue-600 font-bold flex items-center gap-1 hover:underline w-fit"
+                        >
+                          <Globe size={10} />
+                          {isTranslating === req.id ? t('Translating...', currentLanguage) : `${t('Translate to', currentLanguage)} ${currentLanguage}`}
+                        </button>
+                      </div>
                     </div>
                     
                     {currentUser?.role === 'handyman' ? (
@@ -2518,10 +3250,18 @@ export default function App() {
                         <div className="flex flex-wrap gap-2">
                           <button 
                             onClick={() => handleUpdateJobStatus(req, 'responded')}
-                            disabled={req.status === 'responded'}
+                            disabled={req.status === 'responded' || req.status === 'on-the-way' || req.status === 'completed'}
                             className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
                           >
                             Mark as Responded
+                          </button>
+                          <button 
+                            onClick={() => handleUpdateJobStatus(req, 'on-the-way')}
+                            disabled={req.status === 'on-the-way' || req.status === 'completed'}
+                            className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
+                          >
+                            <MapPin size={14} />
+                            Start Journey
                           </button>
                           <button 
                             onClick={() => handleUpdateJobStatus(req, 'completed')}
@@ -2552,7 +3292,7 @@ export default function App() {
                           ) : (
                             <button 
                               onClick={() => handleUnlockLead(req.id)}
-                              className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 flex items-center gap-1 shadow-sm"
+                              className="px-6 py-3 bg-amber-600 text-white text-xs font-bold rounded-2xl hover:bg-amber-700 flex items-center gap-2 shadow-lg shadow-amber-600/20 active:scale-95 transition-all"
                             >
                               <Lock size={14} />
                               Unlock Lead (1 Credit)
@@ -2574,16 +3314,25 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        <div className="flex items-center gap-2 text-slate-500 text-xs">
-                          <CheckCircle2 size={14} className="text-green-500" />
-                          <span>Sent to professional via WhatsApp</span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-slate-500 text-xs">
+                            <CheckCircle2 size={14} className="text-green-500" />
+                            <span>Sent to professional via WhatsApp</span>
+                          </div>
+                          <button 
+                            onClick={() => startChat(req.proId, req.proName)}
+                            className="px-4 py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg hover:bg-blue-100 flex items-center gap-1"
+                          >
+                            <MessageCircle size={14} />
+                            Chat with Pro
+                          </button>
                         </div>
                         
                         <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
                           {req.paymentStatus === 'pending' && (
                             <button 
                               onClick={() => handleInitializePayment(req, 5000)}
-                              className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 flex items-center gap-2 shadow-sm shadow-blue-200"
+                              className="px-6 py-3 bg-blue-600 text-white text-xs font-bold rounded-2xl hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
                             >
                               <CreditCard size={14} />
                               Pay ₦5,000 (Escrow)
@@ -2594,7 +3343,7 @@ export default function App() {
                             <>
                               <button 
                                 onClick={() => handleReleaseFunds(req.id)}
-                                className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 flex items-center gap-2 shadow-sm shadow-emerald-200"
+                                className="px-6 py-3 bg-emerald-600 text-white text-xs font-bold rounded-2xl hover:bg-emerald-700 flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
                               >
                                 <CheckCircle2 size={14} />
                                 Release Funds
@@ -2604,7 +3353,7 @@ export default function App() {
                                   const reason = prompt("Reason for dispute:");
                                   if (reason) handleRaiseDispute(req.id, reason);
                                 }}
-                                className="px-4 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-xl hover:bg-red-100 flex items-center gap-2"
+                                className="px-6 py-3 bg-red-50 text-red-600 text-xs font-bold rounded-2xl hover:bg-red-100 flex items-center gap-2 active:scale-95 transition-all"
                               >
                                 <AlertTriangle size={14} />
                                 Raise Dispute
@@ -2647,7 +3396,13 @@ export default function App() {
                 {chats.length === 0 ? (
                   <div className="p-12 text-center">
                     <MessageCircle size={40} className="mx-auto text-slate-200 mb-4" />
-                    <p className="text-slate-400 text-sm">No conversations yet.</p>
+                    <p className="text-slate-400 text-sm mb-6">No conversations yet.</p>
+                    <button 
+                      onClick={() => setShowChatList(false)}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                    >
+                      Find a Professional
+                    </button>
                   </div>
                 ) : (
                   chats.map((chat) => (
@@ -2708,7 +3463,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               className="block"
             >
-              Find the right handyman
+              {t('Find the right handyman', currentLanguage)}
             </motion.span>
             <motion.span 
               initial={{ opacity: 1, y: 0 }}
@@ -2727,7 +3482,7 @@ export default function App() {
               }}
               className="text-blue-600 italic block sm:inline"
             >
-              anywhere in Nigeria
+              {t('anywhere in Nigeria', currentLanguage)}
             </motion.span>
           </motion.h2>
           
@@ -2741,10 +3496,13 @@ export default function App() {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                 <input 
                   type="text"
-                  placeholder="Search by name or Location"
+                  placeholder={t('Search by name or Location', currentLanguage)}
                   className="w-full pl-12 pr-10 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-500"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    handleSmartMatch(e.target.value);
+                  }}
                 />
                 {searchQuery && (
                   <button 
@@ -2765,7 +3523,7 @@ export default function App() {
                   }`}
                 >
                   <Navigation size={20} className={userLocation ? 'animate-pulse' : ''} />
-                  <span>{userLocation ? 'Location Active' : 'Find Nearby'}</span>
+                  <span>{userLocation ? t('Location Active', currentLanguage) : t('Find Nearby', currentLanguage)}</span>
                 </button>
                 <button 
                   onClick={() => setShowFilters(!showFilters)}
@@ -2776,10 +3534,69 @@ export default function App() {
                   }`}
                 >
                   <Filter size={20} />
-                  <span>Filters {(minRating > 0 || minExperience > 0) && `(${(minRating > 0 ? 1 : 0) + (minExperience > 0 ? 1 : 0)})`}</span>
+                  <span>{t('Filters', currentLanguage)} {(minRating > 0 || minExperience > 0) && `(${(minRating > 0 ? 1 : 0) + (minExperience > 0 ? 1 : 0)})`}</span>
                 </button>
+                
+                <div className="relative flex-1 lg:w-48 h-[60px]">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleDiagnoseImage}
+                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                    title={t('AI Diagnostics', currentLanguage)}
+                  />
+                  <button 
+                    className={`w-full h-full flex items-center justify-center gap-2 px-6 rounded-2xl font-bold transition-all whitespace-nowrap shadow-sm border ${
+                      isAiDiagnosing 
+                      ? 'bg-purple-600 text-white border-purple-600 animate-pulse' 
+                      : 'bg-white border-slate-200 text-purple-600 hover:border-purple-400 hover:bg-purple-50'
+                    }`}
+                  >
+                    <Sparkles size={20} />
+                    <span>{t('AI Diagnostics', currentLanguage)}</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
+
+            {isAiMatching && (
+              <div className="flex items-center justify-center gap-2 text-blue-600 text-sm font-bold mb-4 animate-pulse">
+                <Sparkles size={16} />
+                <span>AI is finding the best matches for you...</span>
+              </div>
+            )}
+
+            {aiDiagnosis && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-xl mx-auto mb-8 bg-purple-50 border border-purple-100 p-4 rounded-2xl flex items-start gap-3"
+              >
+                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-purple-600 shadow-sm shrink-0">
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-purple-900 text-sm">AI Diagnosis Result</h4>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-purple-800 text-xs mt-1"><strong>Issue:</strong> {aiDiagnosis.issue}</p>
+                    <p className="text-purple-700 text-[10px] mt-1">{aiDiagnosis.explanation}</p>
+                    <button 
+                      onClick={() => handleTranslate(`${aiDiagnosis.issue}. ${aiDiagnosis.explanation}`, 'ai-diag')}
+                      className="text-[10px] text-purple-600 font-bold flex items-center gap-1 hover:underline w-fit"
+                    >
+                      <Globe size={10} />
+                      {isTranslating === 'ai-diag' ? t('Translating...', currentLanguage) : `${t('Translate to', currentLanguage)} ${currentLanguage}`}
+                    </button>
+                  </div>
+                  <button 
+                    onClick={() => setAiDiagnosis(null)}
+                    className="mt-2 text-[10px] font-bold text-purple-600 hover:underline"
+                  >
+                    Clear Diagnosis
+                  </button>
+                </div>
+              </motion.div>
+            )}
 
             <AnimatePresence>
               {showFilters && (
@@ -2842,6 +3659,15 @@ export default function App() {
             )}
         </motion.section>
 
+        {/* Safety Tips */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, duration: 0.6 }}
+        >
+          <SafetyTips lang={currentLanguage} />
+        </motion.section>
+
         {/* Categories */}
         <motion.section 
           initial={{ opacity: 0, y: 20 }}
@@ -2850,7 +3676,7 @@ export default function App() {
           className="mb-12"
         >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-700">Categories</h3>
+            <h3 className="font-semibold text-slate-700">{t('Categories', currentLanguage)}</h3>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">
             {CATEGORIES.map((cat) => (
@@ -2864,7 +3690,7 @@ export default function App() {
                 }`}
               >
                 <cat.icon size={18} />
-                <span className="text-sm font-medium">{cat.name}</span>
+                <span className="text-sm font-medium">{t(cat.name, currentLanguage)}</span>
               </button>
             ))}
           </div>
@@ -2934,7 +3760,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-24">
             <AnimatePresence mode="popLayout">
               {filteredHandymen.map((handy) => (
                 <motion.div
@@ -2946,10 +3772,10 @@ export default function App() {
                   onClick={() => setSelectedPro(handy)}
                   className="bg-white border border-slate-200 p-5 rounded-2xl hover:shadow-md transition-shadow group cursor-pointer"
                 >
-                  <div className={`flex flex-col xl:flex-row xl:items-center justify-between gap-4 ${
+                  <div className={`flex flex-col gap-4 ${
                     handy.verified && currentUser?.plan !== 'member' && currentUser?.role !== 'handyman' ? 'opacity-50 grayscale' : ''
                   }`}>
-                    <div className="flex gap-4 flex-1">
+                    <div className="flex gap-4">
                       <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors shrink-0 relative overflow-hidden">
                         {handy.profileImage ? (
                           <img src={handy.profileImage} alt={handy.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -2962,12 +3788,12 @@ export default function App() {
                           </div>
                         )}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-bold text-lg text-slate-900">{handy.name}</h4>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2 mb-1 min-w-0">
+                            <h4 className="font-bold text-lg text-slate-900 truncate">{handy.name}</h4>
                             {handy.availability && (
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border shrink-0 ${
                                 handy.availability === 'Available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                                 handy.availability === 'Busy' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                                 'bg-slate-50 text-slate-400 border-slate-100'
@@ -2975,7 +3801,7 @@ export default function App() {
                                 {handy.availability}
                               </span>
                             )}
-                            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border shrink-0 ${
                               handy.isOnline 
                               ? 'bg-green-50 text-green-600 border-green-100' 
                               : 'bg-gray-50 text-gray-400 border-gray-100'
@@ -2989,7 +3815,7 @@ export default function App() {
                               e.stopPropagation();
                               toggleFavorite(handy.id);
                             }}
-                            className={`p-2 rounded-full transition-all ${
+                            className={`p-2 rounded-full transition-all shrink-0 ${
                               favorites.includes(handy.id)
                               ? 'text-red-500 bg-red-50'
                               : 'text-slate-300 hover:text-red-400 hover:bg-slate-50'
@@ -2998,7 +3824,7 @@ export default function App() {
                             <Heart size={20} fill={favorites.includes(handy.id) ? "currentColor" : "none"} />
                           </button>
                         </div>
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
                           {handy.isFeatured && (
                             <span className="flex items-center gap-1 bg-amber-50 text-amber-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border border-amber-100">
                               <Star size={10} fill="currentColor" />
@@ -3009,6 +3835,12 @@ export default function App() {
                             <span className="flex items-center gap-1 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border border-blue-100">
                               <CheckCircle2 size={10} />
                               Verified
+                            </span>
+                          )}
+                          {handy.ninVerified && (
+                            <span className="flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border border-emerald-100">
+                              <ShieldCheck size={10} />
+                              NIN Verified
                             </span>
                           )}
                         </div>
@@ -3030,23 +3862,34 @@ export default function App() {
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-3 xl:flex-col xl:items-end">
+                    <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-50">
                       {handy.verified && currentUser?.plan !== 'member' && currentUser?.role !== 'handyman' ? (
-                        <div className="px-4 py-2 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded-lg border border-blue-100">
+                        <div className="px-4 py-2 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded-lg border border-blue-100 whitespace-nowrap">
                           Members Only
                         </div>
                       ) : (
-                        <div className="flex gap-2 w-full xl:w-auto">
+                        <>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startChat(handy.id, handy.name);
+                            }}
+                            className="p-3 bg-white border border-blue-600 text-blue-600 rounded-2xl hover:bg-blue-50 transition-all shadow-sm shrink-0 flex items-center justify-center"
+                            title="Chat Now"
+                          >
+                            <MessageCircle size={18} />
+                          </button>
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
                               setRequestingQuotePro(handy);
                             }}
-                            className="flex-1 xl:flex-none flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/10"
+                            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 whitespace-nowrap shrink-0"
                           >
-                            Request Quote
+                            <Zap size={18} />
+                            <span>Request Now</span>
                           </button>
-                        </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -3167,11 +4010,20 @@ export default function App() {
                   <section>
                     <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
                       <Briefcase size={18} className="text-blue-600" />
-                      About the Professional
+                      {t('About the Professional', currentLanguage)}
                     </h3>
-                    <p className="text-slate-600 leading-relaxed">
-                      {selectedPro.description}
-                    </p>
+                    <div className="flex flex-col gap-2">
+                      <p className="text-slate-600 leading-relaxed">
+                        {selectedPro.description}
+                      </p>
+                      <button 
+                        onClick={() => handleTranslate(selectedPro.description, `pro-desc-${selectedPro.id}`)}
+                        className="text-[10px] text-blue-600 font-bold flex items-center gap-1 hover:underline w-fit"
+                      >
+                        <Globe size={10} />
+                        {isTranslating === `pro-desc-${selectedPro.id}` ? t('Translating...', currentLanguage) : `${t('Translate to', currentLanguage)} ${currentLanguage}`}
+                      </button>
+                    </div>
                   </section>
 
                   {selectedPro.portfolio.length > 0 && (
@@ -3189,7 +4041,56 @@ export default function App() {
                   )}
 
                   <section className="bg-slate-50 p-6 rounded-2xl">
-                    <h3 className="font-bold text-slate-900 mb-4">Customer Reviews</h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-slate-900">{t('Reviews', currentLanguage)}</h3>
+                      {reviews.filter(r => r.proId === selectedPro.id).length > 0 && (
+                        <button 
+                          onClick={() => handleSummarizeReviews(selectedPro.id)}
+                          disabled={isAiSummarizing}
+                          className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline disabled:opacity-50"
+                        >
+                          <Sparkles size={14} />
+                          {isAiSummarizing ? 'Summarizing...' : 'AI Summary'}
+                        </button>
+                      )}
+                    </div>
+
+                    {aiSummary && (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="mb-6 bg-blue-600 text-white p-4 rounded-2xl shadow-lg shadow-blue-600/20 relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 right-0 p-2 opacity-10">
+                          <Sparkles size={48} />
+                        </div>
+                        <div className="relative z-10">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-6 h-6 bg-white/20 rounded-lg flex items-center justify-center">
+                              <Sparkles size={12} />
+                            </div>
+                            <span className="text-xs font-black uppercase tracking-wider">AI Review Summary</span>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                          <p className="text-sm leading-relaxed italic">"{aiSummary}"</p>
+                          <button 
+                            onClick={() => handleTranslate(aiSummary, 'ai-summary')}
+                            className="text-[10px] text-blue-600 font-bold flex items-center gap-1 hover:underline w-fit"
+                          >
+                            <Globe size={10} />
+                            {isTranslating === 'ai-summary' ? t('Translating...', currentLanguage) : `${t('Translate to', currentLanguage)} ${currentLanguage}`}
+                          </button>
+                        </div>
+                          <button 
+                            onClick={() => setAiSummary(null)}
+                            className="mt-3 text-[10px] font-bold text-blue-100 hover:text-white underline"
+                          >
+                            Close Summary
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
                     <div className="space-y-4 mb-6">
                       {reviews.filter(r => r.proId === selectedPro.id).map(review => (
                         <div key={review.id} className="bg-white p-4 rounded-xl border border-slate-100">
@@ -3200,7 +4101,16 @@ export default function App() {
                               <span className="text-xs font-bold">{review.rating}</span>
                             </div>
                           </div>
-                          <p className="text-slate-600 text-sm">{review.comment}</p>
+                          <div className="flex flex-col gap-1">
+                            <p className="text-slate-600 text-sm">{review.comment}</p>
+                            <button 
+                              onClick={() => handleTranslate(review.comment, review.id)}
+                              className="text-[10px] text-blue-600 font-bold flex items-center gap-1 hover:underline w-fit"
+                            >
+                              <Globe size={10} />
+                              {isTranslating === review.id ? t('Translating...', currentLanguage) : `${t('Translate to', currentLanguage)} ${currentLanguage}`}
+                            </button>
+                          </div>
                           <span className="text-[10px] text-slate-400 mt-2 block">{review.date}</span>
                         </div>
                       ))}
@@ -3232,8 +4142,9 @@ export default function App() {
                             setNewReviewRating(5);
                           }
                         }}
-                        className="mt-3 w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                        className="mt-3 w-full bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2"
                       >
+                        <CheckCircle2 size={18} />
                         Submit Review
                       </button>
                     </div>
@@ -3264,19 +4175,20 @@ export default function App() {
                       </button>
                     </div>
                   ) : (
-                    <div className="flex gap-4 pt-4">
+                    <div className="flex flex-col sm:flex-row gap-3 pt-4 shrink-0">
                       <button 
                         onClick={() => startChat(selectedPro.id, selectedPro.name)}
-                        className="flex-1 flex items-center justify-center gap-2 bg-white border border-blue-600 text-blue-600 py-4 rounded-2xl font-bold hover:bg-blue-50 transition-all"
+                        className="flex-1 flex items-center justify-center gap-2 bg-white border border-blue-600 text-blue-600 py-4 px-6 rounded-2xl font-bold hover:bg-blue-50 transition-all active:scale-95 whitespace-nowrap shrink-0"
                       >
                         <MessageCircle size={20} />
                         Chat Now
                       </button>
                       <button 
                         onClick={() => setRequestingQuotePro(selectedPro)}
-                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20"
+                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-4 px-6 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 active:scale-95 whitespace-nowrap shrink-0"
                       >
-                        Request Free Quote
+                        <Zap size={20} />
+                        Request Now
                       </button>
                     </div>
                   )}
@@ -3292,6 +4204,7 @@ export default function App() {
         <SimulatedCheckout 
           plan={selectedPlan} 
           onClose={() => setShowCheckout(false)}
+          lang={currentLanguage}
           onComplete={() => {
             setShowCheckout(false);
             setShowPricing(false);
@@ -3550,6 +4463,21 @@ export default function App() {
                 </div>
 
                 <input name="portfolio" placeholder="Portfolio Image URL (Optional)" className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-400 uppercase">Identity Verification (NIN/BVN)</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <select name="idType" className="p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20">
+                      <option value="NIN">NIN</option>
+                      <option value="BVN">BVN</option>
+                      <option value="DriversLicense">Driver's License</option>
+                      <option value="VotersCard">Voter's Card</option>
+                    </select>
+                    <input name="idNumber" placeholder="ID Number" className="p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                  </div>
+                  <p className="text-[10px] text-slate-400 italic">Your ID will be verified securely. We do not store sensitive data.</p>
+                </div>
+
                 <textarea name="description" placeholder="Tell us about your services..." required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 h-24" />
                 
                 <div className="flex gap-4 pt-4">
@@ -3801,13 +4729,45 @@ export default function App() {
                   <input name="name" placeholder="Enter your name" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-400 uppercase ml-1">Job Description</label>
-                  <textarea name="description" placeholder="What do you need help with?" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 h-32" />
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase">Job Description</label>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => handleTranslate(jobDescriptionInput, 'job-refine')}
+                        disabled={isTranslating === 'job-refine' || !jobDescriptionInput}
+                        className="text-[10px] font-bold text-slate-500 flex items-center gap-1 hover:underline disabled:opacity-50"
+                      >
+                        <Globe size={12} />
+                        {isTranslating === 'job-refine' ? t('Translating...', currentLanguage) : `${t('Translate to', currentLanguage)} ${currentLanguage}`}
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => handleRefineDescription(jobDescriptionInput, setJobDescriptionInput)}
+                        disabled={isAiRefining || !jobDescriptionInput}
+                        className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline disabled:opacity-50"
+                      >
+                        <Sparkles size={12} />
+                        {isAiRefining ? 'Refining...' : 'Refine with AI'}
+                      </button>
+                    </div>
+                  </div>
+                  <textarea 
+                    name="description" 
+                    placeholder="What do you need help with?" 
+                    required 
+                    value={jobDescriptionInput}
+                    onChange={(e) => setJobDescriptionInput(e.target.value)}
+                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 h-32" 
+                  />
                 </div>
                 
                 <div className="flex gap-4 pt-4">
-                  <button type="button" onClick={() => setRequestingQuotePro(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
-                  <button type="submit" className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20">Send Request</button>
+                  <button type="button" onClick={() => setRequestingQuotePro(null)} className="flex-1 py-4 rounded-2xl font-bold text-slate-500 hover:bg-slate-100 transition-all active:scale-95">Cancel</button>
+                  <button type="submit" className="flex-1 py-4 rounded-2xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2">
+                    <Zap size={18} />
+                    Send Request
+                  </button>
                 </div>
               </form>
             </motion.div>
@@ -4117,6 +5077,40 @@ export default function App() {
             </span>
           )}
         </button>
+        <div 
+          onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+          className={`flex flex-col items-center gap-1 relative cursor-pointer ${showLanguageMenu ? 'text-blue-600' : 'text-slate-400'}`}
+          ref={mobileLanguageMenuRef}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              setShowLanguageMenu(!showLanguageMenu);
+            }
+          }}
+        >
+          <Globe size={18} />
+          <span className="text-[9px] font-bold">Language</span>
+          {showLanguageMenu && (
+            <div className="absolute bottom-full right-0 mb-2 bg-white border border-slate-200 rounded-xl shadow-2xl py-2 w-40 z-[60] max-h-64 overflow-y-auto custom-scrollbar">
+              {languages.map(lang => (
+                <button
+                  key={lang}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentLanguage(lang);
+                    setShowLanguageMenu(false);
+                  }}
+                  className={`w-full text-left px-4 py-2 text-xs hover:bg-slate-50 transition-colors ${
+                    currentLanguage === lang ? 'text-blue-600 font-bold' : 'text-slate-600'
+                  }`}
+                >
+                  {lang}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button 
           onClick={() => {
             if (currentUser) {
@@ -4371,6 +5365,96 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* HandyPadi AI Assistant */}
+      <div className="fixed bottom-20 md:bottom-6 right-6 z-[100]">
+        <AnimatePresence>
+          {handyPadiOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              className="absolute bottom-16 right-0 w-80 h-96 bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
+            >
+              <div className="p-4 bg-white border-b border-slate-100 text-slate-900 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Logo size={32} />
+                  <span className="font-bold">HandyPadi AI</span>
+                </div>
+                <button onClick={() => setHandyPadiOpen(false)} className="hover:bg-slate-100 p-1 rounded-lg text-slate-400">
+                  <X size={18} />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {handyPadiMessages.length === 0 && (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                      <Logo size={48} />
+                    </div>
+                    <p className="text-slate-500 text-sm">Hi! I'm HandyPadi. How can I help you today?</p>
+                  </div>
+                )}
+                {handyPadiMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${
+                      msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'
+                    }`}>
+                      <div className="flex flex-col gap-1">
+                        {msg.text}
+                        {msg.role === 'bot' && (
+                          <button 
+                            onClick={() => handleTranslate(msg.text, `bot-msg-${i}`)}
+                            className="text-[10px] text-blue-600 font-bold flex items-center gap-1 hover:underline w-fit mt-1 border-t border-slate-200 pt-1"
+                          >
+                            <Globe size={10} />
+                            {isTranslating === `bot-msg-${i}` ? t('Translating...', currentLanguage) : `${t('Translate to', currentLanguage)} ${currentLanguage}`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {isHandyPadiTyping && (
+                  <div className="flex justify-start">
+                    <div className="bg-slate-100 p-3 rounded-2xl rounded-tl-none flex gap-1">
+                      <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
+                      <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                      <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={handleHandyPadiSend} className="p-4 border-t border-slate-100">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={handyPadiInput}
+                    onChange={(e) => setHandyPadiInput(e.target.value)}
+                    placeholder="Ask anything..."
+                    className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                  />
+                  <button 
+                    type="submit" 
+                    className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2"
+                  >
+                    <span className="hidden sm:inline font-bold text-xs">Send</span>
+                    <Send size={18} />
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <button
+          onClick={() => setHandyPadiOpen(!handyPadiOpen)}
+          className="w-14 h-14 bg-white/80 backdrop-blur-md border border-slate-200 rounded-full shadow-xl flex items-center justify-center hover:scale-110 transition-transform active:scale-95 z-[101] overflow-hidden"
+        >
+          {handyPadiOpen ? <X size={24} className="text-slate-600" /> : <Logo size={40} />}
+        </button>
+        <Toaster position="top-right" richColors />
+      </div>
       </div>
     </ErrorBoundary>
   );

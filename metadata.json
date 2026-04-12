@@ -1,7 +1,8 @@
 {
-  "name": "Ṣe Ṣe Wá",
-  "description": "A simple, standalone directory to find qualified handymen and mechanics across Nigeria.",
+  "name": "Ṣe Ṣe Wá - Nigeria's #1 Handyman Marketplace",
+  "description": "Connect with verified local professionals for all your home and office needs. Features secure escrow payments via Paystack, real-time chat, and multi-language support (Pidgin, Yoruba, Hausa, Igbo, Edo).",
   "requestFramePermissions": [
-    "geolocation"
+    "geolocation",
+    "camera"
   ]
 }

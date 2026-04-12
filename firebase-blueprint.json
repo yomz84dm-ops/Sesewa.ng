@@ -1,142 +1,165 @@
 {
   "entities": {
-    "AppUser": {
-      "title": "AppUser",
-      "description": "A user of the application, can be a customer, handyman, or admin.",
+    "User": {
+      "title": "User",
+      "description": "User profile information",
       "type": "object",
       "properties": {
-        "uid": { "type": "string", "description": "The unique ID of the user." },
-        "name": { "type": "string", "description": "The name of the user." },
-        "email": { "type": "string", "format": "email", "description": "The email address of the user." },
-        "role": { "type": "string", "enum": ["user", "handyman", "admin"], "description": "The role of the user." },
-        "photoURL": { "type": "string", "description": "The URL of the user's profile photo." },
-        "phone": { "type": "string", "description": "The phone number of the user." },
-        "plan": { "type": "string", "enum": ["basic", "pro", "member"], "description": "The subscription plan of the user." },
-        "credits": { "type": "number", "description": "The number of credits the user has." },
-        "isVerifiedPending": { "type": "boolean", "description": "Whether the user's verification is pending." },
-        "verified": { "type": "boolean", "description": "Whether the user is verified." },
-        "idDocumentUrl": { "type": "string", "description": "The URL of the user's ID document." },
-        "createdAt": { "type": "string", "format": "date-time", "description": "The time the user was created." }
+        "uid": { "type": "string", "description": "Unique identifier for the user" },
+        "email": { "type": "string", "format": "email", "description": "User's email address" },
+        "name": { "type": "string", "description": "User's full name" },
+        "role": { "type": "string", "enum": ["admin", "user", "handyman"], "description": "User's role in the application" },
+        "photoURL": { "type": "string", "description": "URL to the user's profile picture" },
+        "phone": { "type": "string", "description": "User's phone number" },
+        "plan": { "type": "string", "enum": ["basic", "pro", "member"], "description": "User's subscription plan" },
+        "credits": { "type": "number", "description": "User's lead credits" },
+        "isVerifiedPending": { "type": "boolean", "description": "Whether verification is pending" },
+        "verified": { "type": "boolean", "description": "Whether the user is verified" },
+        "idDocumentUrl": { "type": "string", "description": "URL to the uploaded ID document" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user account was created" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" }
       },
-      "required": ["uid", "name", "email", "role"]
+      "required": ["uid", "email", "role"]
     },
     "Handyman": {
       "title": "Handyman",
-      "description": "A professional providing services.",
+      "description": "Professional service provider profile",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "The unique ID of the handyman." },
-        "name": { "type": "string", "description": "The name of the handyman." },
-        "category": { "type": "string", "description": "The service category." },
-        "location": { "type": "string", "description": "The location of the handyman." },
-        "lat": { "type": "number", "description": "Latitude." },
-        "lng": { "type": "number", "description": "Longitude." },
-        "rating": { "type": "number", "description": "The average rating." },
-        "reviews": { "type": "number", "description": "The number of reviews." },
-        "phone": { "type": "string", "description": "The phone number." },
-        "whatsapp": { "type": "string", "description": "The WhatsApp number." },
-        "experience": { "type": "string", "description": "Experience description." },
-        "experienceYears": { "type": "number", "description": "Years of experience." },
-        "verified": { "type": "boolean", "description": "Whether the handyman is verified." },
-        "isFeatured": { "type": "boolean", "description": "Whether the handyman is featured." },
-        "isOnline": { "type": "boolean", "description": "Whether the handyman is online." },
-        "description": { "type": "string", "description": "A description of services." },
-        "portfolio": { "type": "array", "items": { "type": "string" }, "description": "A list of portfolio image URLs." },
-        "profileImage": { "type": "string", "description": "The URL of the profile image." },
-        "userId": { "type": "string", "description": "The associated user UID." },
-        "availability": { "type": "string", "enum": ["Available", "Busy", "Away"], "description": "Current availability." },
-        "plan": { "type": "string", "enum": ["basic", "pro"], "description": "The handyman's plan." }
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "location": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "rating": { "type": "number" },
+        "reviews": { "type": "number" },
+        "phone": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "experience": { "type": "string" },
+        "experienceYears": { "type": "number" },
+        "verified": { "type": "boolean" },
+        "isFeatured": { "type": "boolean" },
+        "isOnline": { "type": "boolean" },
+        "description": { "type": "string" },
+        "portfolio": { "type": "array", "items": { "type": "string" } },
+        "profileImage": { "type": "string" },
+        "userId": { "type": "string" },
+        "availability": { "type": "string" },
+        "plan": { "type": "string" },
+        "ninVerified": { "type": "boolean" }
       },
-      "required": ["id", "name", "category", "location", "lat", "lng", "rating", "reviews", "phone"]
+      "required": ["id", "name", "category", "location", "rating"]
     },
     "JobRequest": {
       "title": "JobRequest",
-      "description": "A request for a job from a user to a handyman.",
+      "description": "A request for a service from a user to a pro",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "The unique ID of the job request." },
-        "proId": { "type": "string", "description": "The ID of the handyman." },
-        "proName": { "type": "string", "description": "The name of the handyman." },
-        "userUid": { "type": "string", "description": "The UID of the user." },
-        "userName": { "type": "string", "description": "The name of the user." },
-        "userPhone": { "type": "string", "description": "The phone number of the user." },
-        "jobDescription": { "type": "string", "description": "A description of the job." },
-        "status": { "type": "string", "enum": ["pending", "responded", "completed", "cancelled"], "description": "The status of the request." },
-        "paymentStatus": { "type": "string", "enum": ["none", "pending", "escrowed", "released", "refunded"], "description": "The payment status." },
-        "amount": { "type": "number", "description": "The agreed amount." },
-        "paystackReference": { "type": "string", "description": "The Paystack reference." },
-        "date": { "type": "string", "format": "date-time", "description": "The date of the request." },
-        "unlockedBy": { "type": "array", "items": { "type": "string" }, "description": "List of handyman UIDs who unlocked this lead." }
+        "id": { "type": "string" },
+        "proId": { "type": "string" },
+        "proName": { "type": "string" },
+        "userUid": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "jobDescription": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "responded", "on-the-way", "completed", "cancelled"] },
+        "paymentStatus": { "type": "string" },
+        "amount": { "type": "number" },
+        "paystackReference": { "type": "string" },
+        "date": { "type": "string" },
+        "unlockedBy": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["id", "proId", "proName", "userUid", "userName", "jobDescription", "status", "date"]
+      "required": ["id", "proId", "userUid", "status"]
     },
     "Chat": {
       "title": "Chat",
-      "description": "A conversation between two users.",
+      "description": "A conversation between two users",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "The unique ID of the chat." },
-        "participants": { "type": "array", "items": { "type": "string" }, "description": "The UIDs of the participants." },
-        "lastMessage": { "type": "string", "description": "The text of the last message." },
-        "lastMessageAt": { "type": "string", "format": "date-time", "description": "The time of the last message." },
-        "updatedAt": { "type": "string", "format": "date-time", "description": "The time the chat was last updated." }
+        "id": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "otherParticipantName": { "type": "string" }
       },
       "required": ["id", "participants", "updatedAt"]
     },
     "Message": {
       "title": "Message",
-      "description": "A single message in a chat.",
+      "description": "A single message in a chat",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "The unique ID of the message." },
-        "chatId": { "type": "string", "description": "The ID of the chat." },
-        "senderId": { "type": "string", "description": "The UID of the sender." },
-        "text": { "type": "string", "description": "The text of the message." },
-        "createdAt": { "type": "string", "format": "date-time", "description": "The time the message was created." }
+        "id": { "type": "string" },
+        "chatId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "chatId", "senderId", "text", "createdAt"]
     },
     "Notification": {
       "title": "Notification",
-      "description": "A notification for a user.",
+      "description": "A system or user notification",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "The unique ID of the notification." },
-        "userId": { "type": "string", "description": "The UID of the user." },
-        "title": { "type": "string", "description": "The title of the notification." },
-        "message": { "type": "string", "description": "The message of the notification." },
-        "type": { "type": "string", "enum": ["message", "job_status", "quote", "system"], "description": "The type of notification." },
-        "relatedId": { "type": "string", "description": "The ID of the related entity (e.g., chatId, jobRequestId)." },
-        "read": { "type": "boolean", "description": "Whether the notification has been read." },
-        "createdAt": { "type": "string", "format": "date-time", "description": "The time the notification was created." }
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "relatedId": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "userId", "title", "message", "type", "read", "createdAt"]
+      "required": ["id", "userId", "title", "message", "read", "createdAt"]
+    },
+    "Dispute": {
+      "title": "Dispute",
+      "description": "A dispute raised for a job request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "jobRequestId": { "type": "string" },
+        "raisedBy": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "resolved", "refunded"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "resolvedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "jobRequestId", "raisedBy", "status", "createdAt"]
     }
   },
   "firestore": {
     "/users/{userId}": {
-      "schema": "AppUser",
-      "description": "User profiles."
+      "schema": "User",
+      "description": "User profile documents"
     },
     "/handymen/{handymanId}": {
       "schema": "Handyman",
-      "description": "Handyman profiles."
+      "description": "Professional service provider profiles"
     },
-    "/jobRequests/{jobRequestId}": {
+    "/jobRequests/{requestId}": {
       "schema": "JobRequest",
-      "description": "Job requests and leads."
+      "description": "Service requests"
     },
     "/chats/{chatId}": {
       "schema": "Chat",
-      "description": "Chat sessions."
+      "description": "Chat sessions"
     },
     "/chats/{chatId}/messages/{messageId}": {
       "schema": "Message",
-      "description": "Messages within a chat."
+      "description": "Messages within a chat"
     },
     "/notifications/{notificationId}": {
       "schema": "Notification",
-      "description": "User notifications."
+      "description": "User notifications"
+    },
+    "/disputes/{disputeId}": {
+      "schema": "Dispute",
+      "description": "Disputes for job requests"
     }
   }
 }
