@@ -1,24 +1,18 @@
-// Deployment Trigger: March 2026
 import express from "express";
-import path from "path";
-import { fileURLToPath } from "url";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-async function startServer() {
+// This function creates the Express app without starting the server.
+// This is safe for both local development and Firebase Functions analysis.
+export async function createApi() {
   const app = express();
-  const PORT = 3000;
-
   app.use(express.json());
   app.use(cors());
 
-  // API routes
+  // API health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
@@ -38,7 +32,7 @@ async function startServer() {
         "https://api.paystack.co/transaction/initialize",
         {
           email,
-          amount: amount * 100, // Paystack expects amount in kobo
+          amount: amount * 100,
           metadata,
           callback_url: `${req.protocol}://${req.get('host')}/api/paystack/callback`
         },
@@ -81,55 +75,36 @@ async function startServer() {
     }
   });
 
-  // Paystack Webhook
-  app.post("/api/paystack/webhook", async (req, res) => {
-    const hash = req.headers["x-paystack-signature"];
-    // In a real app, you would verify the hash here using crypto.createHmac
-    // For this simulation, we'll assume it's valid if the secret is set
-    
-    const event = req.body;
-    console.log("Paystack Webhook received:", event.event);
-
-    if (event.event === "charge.success") {
-      const { reference, metadata } = event.data;
-      console.log(`Payment successful for reference: ${reference}, metadata:`, metadata);
-      // Here you would update Firestore from the backend for maximum reliability
-    }
-
-    res.sendStatus(200);
-  });
-
-  // Vite middleware for development - Only if NOT in Firebase
-  const isFirebase = process.env.FUNCTIONS_EMULATOR || process.env.FIREBASE_CONFIG || process.env.GCLOUD_PROJECT;
-  
-  if (process.env.NODE_ENV !== "production" && !isFirebase) {
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
   return app;
 }
 
-// For Cloud Run / Local development
-if (process.env.NODE_ENV !== "test" && !process.env.FUNCTIONS_EMULATOR && !process.env.FIREBASE_CONFIG) {
-  const appPromise = startServer();
-  appPromise.then(app => {
+// Development and Cloud Run mode
+// We only listen on a port if we are NOT in the Firebase Functions environment.
+const isFirebase = process.env.FUNCTIONS_EMULATOR || process.env.FIREBASE_CONFIG || process.env.GCLOUD_PROJECT;
+
+if (!isFirebase && process.env.NODE_ENV !== "test") {
+  createApi().then(async (app) => {
+    // In dev mode, we also mount the Vite middleware
+    if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      // In production (Cloud Run), we serve static files from /dist
+      const path = await import("path");
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+
     const PORT = parseInt(process.env.PORT || "3000", 10);
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(`Server running on http://localhost:${PORT}`);
     });
   });
 }
-
-const appPromise = startServer();
-export default appPromise;
