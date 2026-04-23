@@ -99,8 +99,10 @@ async function startServer() {
     res.sendStatus(200);
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  // Vite middleware for development - Only if NOT in Firebase
+  const isFirebase = process.env.FUNCTIONS_EMULATOR || process.env.FIREBASE_CONFIG || process.env.GCLOUD_PROJECT;
+  
+  if (process.env.NODE_ENV !== "production" && !isFirebase) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },

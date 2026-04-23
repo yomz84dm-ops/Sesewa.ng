@@ -1,6 +1,9 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const getAi = () => {
+  const key = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || import.meta.env.VITE_GEMINI_API_KEY || '';
+  return new GoogleGenAI({ apiKey: key });
+};
 
 export const geminiService = {
   /**
@@ -8,6 +11,7 @@ export const geminiService = {
    * Matches a user's natural language query against a list of handymen.
    */
   async matchHandymen(query: string, handymen: any[]) {
+    const ai = getAi();
     const model = "gemini-3-flash-preview";
     const prompt = `
       User Query: "${query}"
@@ -43,6 +47,7 @@ export const geminiService = {
    * Helps a user refine their job description based on initial input.
    */
   async refineJobDescription(initialDescription: string) {
+    const ai = getAi();
     const model = "gemini-3-flash-preview";
     const prompt = `
       The user wants to request a handyman service with this initial description: "${initialDescription}"
@@ -87,6 +92,7 @@ export const geminiService = {
   async summarizeReviews(reviews: any[]) {
     if (reviews.length === 0) return "No reviews yet to summarize.";
     
+    const ai = getAi();
     const model = "gemini-3-flash-preview";
     const prompt = `
       Summarize the following reviews for a professional handyman into a concise "Pro Insights" paragraph (max 3 sentences). 
@@ -113,6 +119,7 @@ export const geminiService = {
    * Analyzes an image to identify the problem and suggest a category.
    */
   async analyzeIssueImage(base64Image: string, mimeType: string) {
+    const ai = getAi();
     const model = "gemini-3-flash-preview";
     const prompt = "Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation.";
 
@@ -150,6 +157,7 @@ export const geminiService = {
    * General Q&A about the platform.
    */
   async handyPadiChat(message: string, history: any[], currentLanguage: string = 'English') {
+    const ai = getAi();
     const model = "gemini-3-flash-preview";
     const chat = ai.chats.create({
       model,
@@ -176,6 +184,7 @@ export const geminiService = {
    * Translates text into the target language.
    */
   async translateText(text: string, targetLanguage: string) {
+    const ai = getAi();
     const model = "gemini-3-flash-preview";
     const prompt = `Translate the following text into ${targetLanguage}. 
     Maintain the original tone and intent. If the text is already in ${targetLanguage}, return it as is.
@@ -201,6 +210,7 @@ export const geminiService = {
    * Generates a voice welcome message in the target language.
    */
   async speakWelcome(language: string) {
+    const ai = getAi();
     const ttsModel = "gemini-2.5-flash-preview-tts";
     const translationModel = "gemini-3-flash-preview";
     

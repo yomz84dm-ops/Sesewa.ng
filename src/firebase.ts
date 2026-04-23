@@ -1,13 +1,31 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, getDocFromServer, doc } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const storage = getStorage(app);
+
+// Initialize Firestore with specific database if provided, otherwise default
+let firestoreDb;
+try {
+  if (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)') {
+    firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    console.log(`Firestore initialized with named database: ${firebaseConfig.firestoreDatabaseId}`);
+  } else {
+    firestoreDb = getFirestore(app);
+    console.log('Firestore initialized with default database');
+  }
+} catch (error) {
+  console.error("Firestore initialization failed. Check your firebase-applet-config.json", error);
+  // Fallback
+  firestoreDb = getFirestore(app);
+}
+
+export const db = firestoreDb;
 
 // Error Handling for Firestore Operations
 export enum OperationType {
@@ -61,14 +79,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Connection test
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. The client is offline.");
-    }
-  }
-}
-testConnection();
+// Connection test is handled in App.tsx
+// testConnection();

@@ -2,186 +2,43 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // 0. Default Deny
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // ===============================================================
-    // Global Helpers
-    // ===============================================================
-    function isSignedIn() { return request.auth != null; }
-    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
-    function isAdmin() { return isVerified() && (request.auth.token.email == "yomz84.dm@gmail.com" || exists(/databases/$(database)/documents/admins/$(request.auth.uid))); }
-    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
-    function incoming() { return request.resource.data; }
-    function existing() { return resource.data; }
-    
-    // ===============================================================
-    // Validation Blueprints
-    // ===============================================================
-    
-    function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'role']) && 
-             data.keys().size() >= 3 && data.keys().size() <= 20 &&
-             data.uid == request.auth.uid &&
-             data.email is string && data.email.size() <= 100 &&
-             data.role in ['admin', 'user', 'handyman'] &&
-             (data.get('phone', '') is string && data.get('phone', '').size() <= 20) &&
-             (data.get('credits', 0) is number);
-    }
-
-    function isValidHandyman(data) {
-      return data.keys().hasAll(['id', 'name', 'category', 'location', 'rating']) &&
-             data.keys().size() >= 5 && data.keys().size() <= 30 &&
-             data.id is string && data.id.size() <= 100 &&
-             data.name is string && data.name.size() <= 100 &&
-             data.category in [
-               'Plumbing', 'Electrical', 'Carpentry', 'Painting', 'General Repairs', 
-               'Mechanic', 'AC Technician', 'Tailor', 'Bricklayer', 'Cleaning', 
-               'House Help', 'Auto Services', 'Manicure', 'Pedicure', 'Hairstylist', 
-               'Barber', 'Horticulturist', 'Tattoo artist', 'Generator Repair', 
-               'Satellite Installer', 'Lawyer', 'Accountant', 'House Removal', 'Home Tutor',
-               'Inverter Specialist', 'Borehole Driller'
-             ] &&
-             data.location is string && data.location.size() <= 200 &&
-             data.rating is number && data.rating >= 0 && data.rating <= 5;
-    }
-
-    function isValidJobRequest(data) {
-      return data.keys().hasAll(['id', 'proId', 'userUid', 'status']) &&
-             data.keys().size() >= 4 && data.keys().size() <= 20 &&
-             data.id is string && data.id.size() <= 100 &&
-             data.userUid == request.auth.uid &&
-             data.status in ['pending', 'responded', 'on-the-way', 'completed', 'cancelled'] &&
-             (data.get('amount', 0) is number);
-    }
-
-    function isValidChat(data) {
-      return data.keys().hasAll(['id', 'participants', 'updatedAt']) &&
-             data.keys().size() >= 3 && data.keys().size() <= 10 &&
-             data.participants is list && data.participants.size() == 2 &&
-             request.auth.uid in data.participants &&
-             data.updatedAt == request.time;
-    }
-
-    function isValidMessage(data) {
-      return data.keys().hasAll(['id', 'chatId', 'senderId', 'text', 'createdAt']) &&
-             data.keys().size() == 5 &&
-             data.senderId == request.auth.uid &&
-             data.text is string && data.text.size() <= 2000 &&
-             data.createdAt == request.time;
-    }
-
-    function isValidNotification(data) {
-      return data.keys().hasAll(['id', 'userId', 'title', 'message', 'read', 'createdAt']) &&
-             data.keys().size() >= 6 && data.keys().size() <= 10 &&
-             data.userId is string &&
-             data.title is string && data.title.size() <= 200 &&
-             data.message is string && data.message.size() <= 1000 &&
-             data.read is bool &&
-             data.createdAt == request.time;
-    }
-
-    function isValidDispute(data) {
-      return data.keys().hasAll(['id', 'jobRequestId', 'raisedBy', 'status', 'createdAt']) &&
-             data.keys().size() >= 5 && data.keys().size() <= 10 &&
-             data.raisedBy == request.auth.uid &&
-             data.status in ['open', 'resolved', 'refunded'] &&
-             data.createdAt == request.time;
-    }
-
-    // ===============================================================
-    // Collection Rules
-    // ===============================================================
-
     match /users/{userId} {
-      allow get: if isValidId(userId) && (request.auth.uid == userId || isAdmin());
-      // No blanket list of users to prevent PII scraping
-      allow list: if isAdmin();
-      allow create: if isValidId(userId) && isVerified() && userId == request.auth.uid && isValidUser(incoming());
-      allow update: if isValidId(userId) && isVerified() && (
-        (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoURL', 'phone', 'lat', 'lng', 'isVerifiedPending', 'idDocumentUrl'])) ||
-        isAdmin()
-      );
-      allow delete: if isAdmin();
+      allow get: if request.auth != null && (request.auth.uid == userId || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (request.auth.uid == userId || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
     match /handymen/{handymanId} {
-      allow get: if isValidId(handymanId);
-      allow list: if true; // Public marketplace
-      allow create: if isValidId(handymanId) && isVerified() && (
-        (incoming().userId == request.auth.uid && isValidHandyman(incoming())) ||
-        isAdmin()
-      );
-      allow update: if isValidId(handymanId) && isVerified() && (
-        (existing().userId == request.auth.uid && incoming().userId == request.auth.uid && isValidHandyman(incoming()) && 
-         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'location', 'lat', 'lng', 'phone', 'whatsapp', 'experience', 'experienceYears', 'description', 'portfolio', 'profileImage', 'availability', 'plan'])) ||
-        isAdmin()
-      );
-      allow delete: if isAdmin() || (isVerified() && existing().userId == request.auth.uid);
+      allow read: if true;
+      allow write: if request.auth != null;
     }
 
     match /jobRequests/{requestId} {
-      allow read: if isSignedIn() && (request.auth.uid == resource.data.userUid || request.auth.uid == resource.data.proId || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userUid == request.auth.uid || resource.data.proId == request.auth.uid || isAdmin());
-      allow create: if isValidId(requestId) && isVerified() && isValidJobRequest(incoming()) && 
-                    exists(/databases/$(database)/documents/handymen/$(incoming().proId));
-      allow update: if isValidId(requestId) && isVerified() && (
-        // Action: Update Status (User or Pro)
-        ( (request.auth.uid == existing().userUid || request.auth.uid == existing().proId) && 
-          isValidJobRequest(incoming()) && 
-          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'paymentStatus', 'paystackReference', 'amount']) &&
-          existing().status != 'completed' && existing().status != 'cancelled' // Terminal state lock
-        ) ||
-        // Action: Unlock Lead (Handyman)
-        ( request.auth.uid == existing().proId && 
-          incoming().diff(existing()).affectedKeys().hasOnly(['unlockedBy']) &&
-          incoming().unlockedBy.size() <= 10
-        ) ||
-        isAdmin()
-      );
-      allow delete: if isAdmin();
+      allow read, write: if request.auth != null;
     }
 
     match /chats/{chatId} {
-      allow get: if isValidId(chatId) && (request.auth.uid in existing().participants || isAdmin());
-      allow list: if isSignedIn() && (resource.data.participants.hasAny([request.auth.uid]) || isAdmin());
-      allow create: if isValidId(chatId) && isVerified() && isValidChat(incoming());
-      allow update: if isValidId(chatId) && isVerified() && (request.auth.uid in existing().participants || isAdmin()) && 
-                    isValidChat(incoming()) && 
-                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt', 'updatedAt', 'otherParticipantName']);
-      
+      allow read, write: if request.auth != null;
       match /messages/{messageId} {
-        allow read: if isValidId(messageId) && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
-        allow create: if isValidId(messageId) && isVerified() && isValidMessage(incoming()) && 
-                      request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow read, write: if request.auth != null;
       }
     }
 
     match /notifications/{notificationId} {
-      allow get: if isValidId(notificationId) && (request.auth.uid == existing().userId || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isValidId(notificationId) && isAdmin(); // Only system can create
-      allow update: if isValidId(notificationId) && isVerified() && request.auth.uid == existing().userId && 
-                    incoming().diff(existing()).affectedKeys().hasOnly(['read']);
-      allow delete: if isValidId(notificationId) && isVerified() && request.auth.uid == existing().userId;
+      allow read, write: if request.auth != null;
     }
 
-    match /disputes/{disputeId} {
-      allow get: if isValidId(disputeId) && (request.auth.uid == existing().raisedBy || isAdmin());
-      allow list: if isSignedIn() && (resource.data.raisedBy == request.auth.uid || isAdmin());
-      allow create: if isValidId(disputeId) && isVerified() && isValidDispute(incoming()) && 
-                    exists(/databases/$(database)/documents/jobRequests/$(incoming().jobRequestId));
-      allow update: if isValidId(disputeId) && isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    // Interaction Collections (if any)
     match /reviews/{reviewId} {
       allow read: if true;
-      allow create: if isVerified() && incoming().userId == request.auth.uid;
-      allow update, delete: if isAdmin() || (isVerified() && existing().userId == request.auth.uid);
+      allow write: if request.auth != null;
+    }
+
+    match /admins/{adminId} {
+      allow read: if request.auth != null;
     }
   }
 }

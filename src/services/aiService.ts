@@ -1,7 +1,26 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Standard initialization as per skills
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Standard initialization - using a safe accessor for Vite
+const getApiKey = () => {
+  try {
+    // @ts-ignore - process.env might be defined by Vite 'define'
+    return process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || "";
+  } catch (e) {
+    return import.meta.env.VITE_GEMINI_API_KEY || "";
+  }
+};
+
+let aiInstance: GoogleGenAI | null = null;
+const getAI = () => {
+  if (!aiInstance) {
+    const key = getApiKey();
+    if (!key) {
+      console.warn("GEMINI_API_KEY is not configured. AI features will be disabled.");
+    }
+    aiInstance = new GoogleGenAI({ apiKey: key });
+  }
+  return aiInstance;
+};
 
 export interface PriceEstimation {
   minPrice: number;
@@ -33,6 +52,7 @@ export async function getPriceEstimation(
     - Market Notes should be tailored to the business environment of ${country}.
 `;
 
+  const ai = getAI();
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: prompt,

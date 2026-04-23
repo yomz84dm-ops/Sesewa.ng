@@ -1822,6 +1822,14 @@ export default function App() {
 
   // Firebase Auth & User Data
   React.useEffect(() => {
+    // Fail-safe initialization timeout: Show something even if Firebase hangs
+    const initTimeout = setTimeout(() => {
+      if (!isAuthReady) {
+        console.warn("Initialization taking longer than expected. Proceeding with limited functionality...");
+        setIsAuthReady(true);
+      }
+    }, 5000);
+
     async function testConnection() {
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
@@ -1841,16 +1849,19 @@ export default function App() {
         ...doc.data()
       })) as Handyman[];
 
-      // Check for missing initial pros and seed them
+      // Check for missing initial pros and seed them - Only if admin
       const existingIds = new Set(dbHandymen.map(h => h.id));
       const missingPros = INITIAL_HANDYMEN.filter(pro => !existingIds.has(pro.id));
       
-      if (missingPros.length > 0) {
+      if (missingPros.length > 0 && auth.currentUser?.email === 'yomz84.dm@gmail.com') {
         console.log(`Seeding ${missingPros.length} missing professionals...`);
         for (const pro of missingPros) {
-          await setDoc(doc(db, 'handymen', pro.id), pro);
+          try {
+            await setDoc(doc(db, 'handymen', pro.id), pro);
+          } catch (e) {
+            console.error(`Failed to seed pro ${pro.id}:`, e);
+          }
         }
-        // The next snapshot will include these new pros
       }
       
       setHandymen(dbHandymen);
@@ -1905,6 +1916,7 @@ export default function App() {
         setCurrentUser(null);
       }
       setIsAuthReady(true);
+      clearTimeout(initTimeout);
     });
 
     return () => {
@@ -2884,6 +2896,17 @@ export default function App() {
       setIsAiDiagnosing(false);
     }
   };
+
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-center">
+        <Logo className="w-24 h-24 mb-8 animate-pulse" />
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-6"></div>
+        <h1 className="text-2xl font-bold text-white mb-2">Ṣe Ṣe Wá</h1>
+        <p className="text-slate-400">Loading marketplace... please wait.</p>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
