@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import cors from "cors";
@@ -101,6 +100,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -118,13 +118,15 @@ async function startServer() {
 }
 
 // For Cloud Run / Local development
-const appPromise = startServer();
-
-appPromise.then(app => {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
+if (process.env.NODE_ENV !== "test" && !process.env.FUNCTIONS_EMULATOR && !process.env.FIREBASE_CONFIG) {
+  const appPromise = startServer();
+  appPromise.then(app => {
+    const PORT = parseInt(process.env.PORT || "3000", 10);
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on port ${PORT}`);
+    });
   });
-});
+}
 
+const appPromise = startServer();
 export default appPromise;

@@ -60,7 +60,11 @@ import {
   PenTool,
   Battery,
   Waves,
-  Radio
+  Radio,
+  Scale,
+  Calculator,
+  Truck,
+  BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -94,6 +98,7 @@ import { geminiService } from './services/geminiService';
 
 import { Logo } from './components/Logo';
 import { t } from './translations';
+import { getPriceEstimation, PriceEstimation } from './services/aiService';
 
 // --- Error Handling ---
 enum OperationType {
@@ -289,7 +294,7 @@ interface Notification {
 interface Handyman {
   id: string;
   name: string;
-  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services' | 'Manicure' | 'Pedicure' | 'Hairstylist' | 'Barber' | 'Horticulturist' | 'Tattoo artist' | 'Generator Repair' | 'Satellite Installer';
+  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services' | 'Manicure' | 'Pedicure' | 'Hairstylist' | 'Barber' | 'Horticulturist' | 'Tattoo artist' | 'Generator Repair' | 'Satellite Installer' | 'Lawyer' | 'Accountant' | 'House Removal' | 'Home Tutor' | 'Inverter Specialist' | 'Borehole Driller';
   location: string;
   lat: number;
   lng: number;
@@ -855,6 +860,10 @@ const CATEGORIES = [
   { name: 'Inverter Specialist', icon: Battery },
   { name: 'Borehole Driller', icon: Waves },
   { name: 'Satellite Installer', icon: Radio },
+  { name: 'Lawyer', icon: Scale },
+  { name: 'Accountant', icon: Calculator },
+  { name: 'House Removal', icon: Truck },
+  { name: 'Home Tutor', icon: BookOpen },
 ];
 
 import { Toaster, toast } from 'sonner';
@@ -1435,6 +1444,195 @@ const PaystackBankTransferGuide = ({ lang }: { lang: string }) => {
           : 'When the Paystack window opens, select "Transfer" to get a temporary bank account number for this payment.'}
       </p>
     </div>
+  );
+};
+
+// --- AI Price Guide Component ---
+const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: string) => void, market: { name: string, currency: string } }) => {
+  const [task, setTask] = useState('');
+  const [location, setLocation] = useState('Lagos');
+  const [estimation, setEstimation] = useState<PriceEstimation | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleEstimate = async () => {
+    if (!task.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getPriceEstimation(task, location, market.name, market.currency);
+      setEstimation(result);
+    } catch (err) {
+      setError('Could not get estimation. Please try again.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFindHandymen = () => {
+    if (task) {
+      onSearch(task);
+      // Scroll to list
+      const listElement = document.querySelector('#handyman-list');
+      if (listElement) {
+        listElement.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+  };
+
+  const currencySymbol = market.currency === 'NGN' ? '₦' : market.currency === 'GHS' ? 'GH₵' : market.currency === 'KES' ? 'KSh' : market.currency === 'ZAR' ? 'R' : market.currency;
+
+  return (
+    <section className="py-20 bg-slate-900 overflow-hidden relative">
+      <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+      <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+
+      <div className="max-w-4xl mx-auto px-4 relative z-10">
+        <div className="text-center mb-12">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 font-medium mb-6"
+          >
+            <Sparkles size={16} />
+            <span>AI Price Estimator</span>
+          </motion.div>
+          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">Know the Fair Price Before You Book</h2>
+          <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+            Our AI analyzes current market trends in {market.name} to give you a fair price range for any repair task.
+          </p>
+        </div>
+
+        <div className="bg-white/5 border border-white/10 p-2 rounded-3xl backdrop-blur-sm shadow-2xl">
+          <div className="bg-slate-800 rounded-2xl p-6 md:p-8">
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-slate-300 text-sm font-medium ml-1">What needs fixing?</label>
+                  <div className="relative">
+                    <PenTool className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Repair 3HP AC leak" 
+                      value={task}
+                      onChange={(e) => setTask(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-white pl-12 pr-4 py-4 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-slate-300 text-sm font-medium ml-1">Where are you?</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                    <select 
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 text-white pl-12 pr-4 py-4 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none appearance-none"
+                    >
+                      <option value="Lagos">Lagos</option>
+                      <option value="Abuja">Abuja</option>
+                      <option value="Port Harcourt">Port Harcourt</option>
+                      <option value="Ibadan">Ibadan</option>
+                      <option value="Kano">Kano</option>
+                      <option value="Enugu">Enugu</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleEstimate}
+                disabled={loading || !task.trim()}
+                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <RotateCcw className="animate-spin" size={20} />
+                    <span>Analyzing Market Data...</span>
+                  </>
+                ) : (
+                  <>
+                    <Calculator size={20} />
+                    <span>Get Instant Estimate</span>
+                  </>
+                )}
+              </button>
+
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl flex items-center gap-3">
+                  <AlertCircle size={20} />
+                  <p>{error}</p>
+                </div>
+              )}
+
+              <AnimatePresence>
+                {estimation && !loading && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="pt-8 border-t border-slate-700"
+                  >
+                    <div className="flex flex-col md:flex-row gap-8">
+                      <div className="flex-1 space-y-6">
+                        <div>
+                          <p className="text-slate-500 text-sm font-medium mb-1 uppercase tracking-wider">Estimated Fair Range</p>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-5xl font-black text-white">
+                              {currencySymbol}{estimation.minPrice.toLocaleString()} - {currencySymbol}{estimation.maxPrice.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="bg-blue-500/5 border border-blue-500/10 rounded-2xl p-5">
+                          <div className="flex items-start gap-3">
+                            <Sparkles className="text-blue-400 shrink-0 mt-1" size={20} />
+                            <p className="text-slate-300 leading-relaxed italic text-lg">"{estimation.reasoning}"</p>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={handleFindHandymen}
+                          className="w-full bg-white text-slate-900 font-bold py-4 rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Search size={20} />
+                          Find Professionals Now
+                        </button>
+                      </div>
+
+                      <div className="md:w-1/3 space-y-6">
+                        <div>
+                          <p className="text-slate-500 text-sm font-medium mb-3 uppercase tracking-wider">Price Factors</p>
+                          <ul className="space-y-2">
+                            {estimation.factors.map((factor, i) => (
+                              <li key={i} className="flex items-center gap-2 text-slate-300 text-sm">
+                                <CheckCircle2 className="text-emerald-500 shrink-0" size={14} />
+                                {factor}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10">
+                          <div className="flex items-center gap-2 text-orange-400 mb-2">
+                            <AlertTriangle size={16} />
+                            <span className="text-xs font-bold uppercase tracking-wider">Expert's Note</span>
+                          </div>
+                          <p className="text-slate-400 text-xs leading-relaxed">
+                            {estimation.marketNotes}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 };
 
@@ -2604,6 +2802,18 @@ export default function App() {
     translateAiContent();
   }, [currentLanguage]);
 
+  // Multi-Country Logic based on domain
+  const getCountryFromDomain = () => {
+    const host = window.location.hostname;
+    if (host.endsWith('.gh')) return { name: 'Ghana', slogan: 'anywhere in Ghana', currency: 'GHS', jurisdiction: 'The Republic of Ghana', law: 'Ghanaian Law', compliance: 'Data Protection Act, 2012 (Act 843)' };
+    if (host.endsWith('.ke')) return { name: 'Kenya', slogan: 'anywhere in Kenya', currency: 'KES', jurisdiction: 'The Republic of Kenya', law: 'Kenyan Law', compliance: 'Data Protection Act (DPA), 2019' };
+    if (host.endsWith('.za')) return { name: 'South Africa', slogan: 'anywhere in South Africa', currency: 'ZAR', jurisdiction: 'The Republic of South Africa', law: 'South African Law', compliance: 'Protection of Personal Information Act (POPIA)' };
+    // Default to Nigeria
+    return { name: 'Nigeria', slogan: 'anywhere in Nigeria', currency: 'NGN', jurisdiction: 'The Federal Republic of Nigeria', law: 'Nigerian Law', compliance: 'Nigeria Data Protection Regulation (NDPR)' };
+  };
+
+  const currentMarket = useMemo(() => getCountryFromDomain(), []);
+
   const handleSmartMatch = async (query: string) => {
     if (query.length < 10) {
       setAiMatchedProIds([]);
@@ -3482,7 +3692,7 @@ export default function App() {
               }}
               className="text-blue-600 italic block sm:inline"
             >
-              {t('anywhere in Nigeria', currentLanguage)}
+              {t(currentMarket.slogan, currentLanguage)}
             </motion.span>
           </motion.h2>
           
@@ -3668,6 +3878,15 @@ export default function App() {
           <SafetyTips lang={currentLanguage} />
         </motion.section>
 
+        {/* AI Estimation Section */}
+        <AIEstimationSection 
+          market={currentMarket}
+          onSearch={(query) => {
+            setSearchQuery(query);
+            handleSmartMatch(query);
+          }} 
+        />
+
         {/* Categories */}
         <motion.section 
           initial={{ opacity: 0, y: 20 }}
@@ -3697,7 +3916,7 @@ export default function App() {
         </motion.section>
 
         {/* Handyman List */}
-        <section>
+        <section id="handyman-list">
           <div className="flex items-center justify-between mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <h3 className="font-semibold text-slate-700">
@@ -5154,7 +5373,7 @@ export default function App() {
         </div>
 
         <p className="text-slate-400 text-sm">
-          &copy; 2026 Ṣe Ṣe Wá Group Limited. Simple. Standalone. Local.
+          &copy; 2026 Ṣe Ṣe Wá Group Limited. {currentMarket.name}'s leading platform for repairs.
         </p>
       </footer>
 
@@ -5178,7 +5397,7 @@ export default function App() {
               <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                 <div>
                   <h2 className="text-2xl font-bold text-slate-900">Terms of Service</h2>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter mt-1">Last Updated: March 2026 • Nigeria Digital Law Compliant</p>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter mt-1">Last Updated: March 2026 • {currentMarket.name} Digital Law Compliant</p>
                 </div>
                 <button onClick={() => setShowTerms(false)} className="p-2 bg-white border border-slate-200 rounded-full text-slate-500 hover:bg-slate-50 transition-colors">
                   <X size={20} />
@@ -5226,10 +5445,10 @@ export default function App() {
                 <section>
                   <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
                     <Lock size={20} className="text-slate-600" />
-                    4. Nigerian Law & Jurisdiction
+                    4. {currentMarket.name} Law & Jurisdiction
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    These terms are governed by the laws of the Federal Republic of Nigeria, including the Cybercrimes Act and relevant consumer protection regulations. Any legal proceedings shall be conducted in Nigerian courts.
+                    These terms are governed by the laws of {currentMarket.jurisdiction}, including the Cybercrimes Act and relevant consumer protection regulations. Any legal proceedings shall be conducted in {currentMarket.name} courts.
                   </p>
                 </section>
               </div>
@@ -5281,7 +5500,7 @@ export default function App() {
                     1. Data We Collect
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    In compliance with the <strong>Nigeria Data Protection Regulation (NDPR)</strong>, we collect only the information necessary to provide our services:
+                    In compliance with the <strong>{currentMarket.compliance}</strong>, we collect only the information necessary to provide our services:
                   </p>
                   <ul className="list-disc pl-5 text-sm text-slate-600 mt-2 space-y-1">
                     <li>Basic profile info (Name, Email, Phone)</li>
@@ -5309,7 +5528,7 @@ export default function App() {
                     3. Data Retention & Your Rights
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    You have the right to request access to your data, correction of errors, or deletion of your account. We retain data only as long as necessary to fulfill the purposes outlined or as required by Nigerian law.
+                    You have the right to request access to your data, correction of errors, or deletion of your account. We retain data only as long as necessary to fulfill the purposes outlined or as required by {currentMarket.law}.
                   </p>
                 </section>
 
@@ -5319,7 +5538,7 @@ export default function App() {
                     4. Contact Our Data Protection Officer
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    If you have questions about your data or wish to exercise your rights under the NDPR, please contact us at <strong>privacy@sesewa.app</strong>.
+                    If you have questions about your data or wish to exercise your rights under the {currentMarket.compliance}, please contact us at <strong>privacy@sesewa.app</strong>.
                   </p>
                 </section>
               </div>
