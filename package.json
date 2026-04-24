@@ -8,6 +8,7 @@
     "dev": "tsx server.ts",
     "start": "node server.ts",
     "build": "vite build",
+    "lint": "eslint .",
     "clean": "rm -rf dist"
   },
   "engines": {

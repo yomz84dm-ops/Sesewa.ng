@@ -130,6 +130,20 @@
         "resolvedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "jobRequestId", "raisedBy", "status", "createdAt"]
+    },
+    "ManagedDomain": {
+      "title": "ManagedDomain",
+      "description": "A domain managed by the platform",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "description": "Domain name, e.g., sesewa.ng" },
+        "mode": { "type": "string", "enum": ["serve", "redirect"], "description": "Whether to serve traffic or redirect" },
+        "target": { "type": "string", "description": "Redirect destination if mode is redirect" },
+        "isDefault": { "type": "boolean", "description": "Whether this is the primary/default domain" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "mode"]
     }
   },
   "firestore": {
@@ -160,6 +174,10 @@
     "/disputes/{disputeId}": {
       "schema": "Dispute",
       "description": "Disputes for job requests"
+    },
+    "/managedDomains/{domainId}": {
+      "schema": "ManagedDomain",
+      "description": "Domains managed for country-specific traffic"
     }
   }
 }

@@ -23,6 +23,38 @@
   </head>
   <body>
     <div id="root"></div>
+    <div id="error-display" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: #0f172a; color: #f43f5e; padding: 20px; font-family: monospace; z-index: 10000; overflow: auto; border: 10px solid #1e293b;">
+      <h1 style="color: white; margin-bottom: 20px;">Ṣe Ṣe Wá - Debug Console</h1>
+      <div id="error-content" style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);"></div>
+      <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: white; color: black; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Reload Page</button>
+      <p style="color: #64748b; margin-top: 20px; font-size: 12px;">If you see this, a fatal error occurred during initialization.</p>
+    </div>
+    <script>
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        var display = document.getElementById('error-display');
+        var content = document.getElementById('error-content');
+        display.style.display = 'block';
+        content.innerHTML += '<div style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px;">' +
+          '<div style="color: #94a3b8; font-size: 11px;">[' + new Date().toLocaleTimeString() + ']</div>' +
+          '<div style="font-weight: bold; margin: 4px 0;">' + msg + '</div>' +
+          '<div style="color: #64748b; font-size: 12px;">' + url + ':' + lineNo + '</div>' +
+          (error && error.stack ? '<pre style="font-size: 10px; color: #475569; margin-top: 8px; white-space: pre-wrap;">' + error.stack + '</pre>' : '') +
+          '</div>';
+        return false;
+      };
+      console.log = (function(oldLog) {
+        return function() {
+          var display = document.getElementById('error-display');
+          var content = document.getElementById('error-content');
+          if (window.location.search.includes('debug=true')) {
+            display.style.display = 'block';
+            var args = Array.from(arguments).map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+            content.innerHTML += '<div style="color: #10b981; font-size: 12px; margin-bottom: 8px; border-left: 2px solid #10b981; padding-left: 8px;">' + args + '</div>';
+          }
+          oldLog.apply(console, arguments);
+        };
+      })(console.log);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

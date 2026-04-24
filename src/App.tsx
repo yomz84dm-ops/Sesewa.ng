@@ -24,9 +24,7 @@ import {
   LayoutGrid,
   Home,
   Sparkles,
-  Trash2,
   MessageCircle,
-  X,
   CheckCircle2,
   Image as ImageIcon,
   Navigation,
@@ -64,7 +62,11 @@ import {
   Scale,
   Calculator,
   Truck,
-  BookOpen
+  BookOpen,
+  MoreVertical,
+  Trash2,
+  Edit,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -90,25 +92,19 @@ import {
   getDoc,
   updateDoc,
   getDocFromServer,
+  deleteDoc,
   Timestamp
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, storage } from './firebase';
-import { geminiService } from './services/geminiService';
-
+import { Toaster, toast } from 'sonner';
 import { Logo } from './components/Logo';
 import { t } from './translations';
 import { getPriceEstimation, PriceEstimation } from './services/aiService';
+import { auth, db, storage, OperationType } from './firebase';
+import { geminiService } from './services/geminiService';
 
-// --- Error Handling ---
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
+// --- Enums ---
+// OperationType is imported from ./firebase
 
 interface FirestoreErrorInfo {
   error: string;
@@ -278,6 +274,15 @@ interface Dispute {
   status: 'open' | 'resolved' | 'refunded';
   createdAt: any;
   resolvedAt?: any;
+}
+
+interface ManagedDomain {
+  id: string;
+  name: string;
+  mode: 'serve' | 'redirect';
+  target?: string;
+  isDefault?: boolean;
+  createdAt: any;
 }
 
 interface Notification {
@@ -865,8 +870,6 @@ const CATEGORIES = [
   { name: 'House Removal', icon: Truck },
   { name: 'Home Tutor', icon: BookOpen },
 ];
-
-import { Toaster, toast } from 'sonner';
 
 // --- Helpers ---
 function deg2rad(deg: number) {
@@ -1636,7 +1639,10 @@ const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: string) =
   );
 };
 
+console.log("App.tsx module evaluation started");
+
 export default function App() {
+  console.log("App component rendered");
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -1680,9 +1686,43 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [pendingVerifications, setPendingVerifications] = useState<AppUser[]>([]);
+  const [managedDomains, setManagedDomains] = useState<ManagedDomain[]>([]);
+  const [editingDomain, setEditingDomain] = useState<ManagedDomain | null>(null);
+  const [showDomainEditModal, setShowDomainEditModal] = useState(false);
+  const [domainMenuOpen, setDomainMenuOpen] = useState<string | null>(null);
   const isAdmin = currentUser?.email === 'yomz84.dm@gmail.com' || currentUser?.role === 'admin';
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
+  const isDebug = window.location.search.includes('debug=true') || 
+                  window.location.hostname.includes('localhost') || 
+                  window.location.hostname.includes('.web.app') || 
+                  window.location.hostname.includes('.firebaseapp.com');
+
+  const handleLoggedError = (error: any, type: string, path: string) => {
+    console.error(`[${type}] ${path}:`, error);
+    const msg = error.message || String(error);
+    if (isDebug) {
+      setInitError(prev => `${prev ? prev + '\n' : ''}[${type}] ${path}: ${msg}`);
+    }
+    // Only throw if not in debug mode or if it's critical
+    if (!isDebug) {
+      try {
+        handleFirestoreError(error, type as any, path);
+      } catch (e) {
+        console.error("Error handler fallback:", e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    console.log("App initialized", {
+      hostname: window.location.hostname,
+      protocol: window.location.protocol,
+      isAuthReady,
+      hasCurrentUser: !!currentUser
+    });
+  }, [isAuthReady, currentUser]);
 
   // --- AI States ---
   const [aiMatchedProIds, setAiMatchedProIds] = useState<string[]>([]);
@@ -1874,29 +1914,35 @@ export default function App() {
       if (user) {
         // Use onSnapshot for real-time user data updates (credits, plan, etc.)
         const unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), async (userDoc) => {
-          if (userDoc.exists()) {
-            const userData = userDoc.data() as AppUser;
-            // Ensure admin email always has admin role
-            if (user.email === 'yomz84.dm@gmail.com' && userData.role !== 'admin') {
-              userData.role = 'admin';
-              await updateDoc(doc(db, 'users', user.uid), { role: 'admin' });
+          try {
+            if (userDoc.exists()) {
+              const userData = userDoc.data() as AppUser;
+              // Ensure admin email always has admin role
+              if (user.email === 'yomz84.dm@gmail.com' && userData.role !== 'admin') {
+                userData.role = 'admin';
+                await updateDoc(doc(db, 'users', user.uid), { role: 'admin' });
+              }
+              setCurrentUser(userData);
+            } else {
+              const newUser: AppUser = {
+                uid: user.uid,
+                name: user.displayName || 'Anonymous',
+                email: user.email || '',
+                role: user.email === 'yomz84.dm@gmail.com' ? 'admin' : 'user',
+                photoURL: user.photoURL || '',
+                credits: 2
+              };
+              await setDoc(doc(db, 'users', user.uid), {
+                ...newUser,
+                createdAt: serverTimestamp()
+              });
+              setCurrentUser(newUser);
             }
-            setCurrentUser(userData);
-          } else {
-            const newUser: AppUser = {
-              uid: user.uid,
-              name: user.displayName || 'Anonymous',
-              email: user.email || '',
-              role: user.email === 'yomz84.dm@gmail.com' ? 'admin' : 'user',
-              photoURL: user.photoURL || '',
-              credits: 2
-            };
-            await setDoc(doc(db, 'users', user.uid), {
-              ...newUser,
-              createdAt: serverTimestamp()
-            });
-            setCurrentUser(newUser);
+          } catch (err) {
+            handleLoggedError(err, OperationType.GET, `users/${user.uid}`);
           }
+        }, (error) => {
+          handleLoggedError(error, OperationType.LIST, 'users');
         });
 
         // Reset view to home page and all filters upon login
@@ -1967,6 +2013,133 @@ export default function App() {
 
     return () => unsubscribe();
   }, [currentUser]);
+
+  // Firebase Managed Domains
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  useEffect(() => {
+    // Check for skip parameter
+    if (window.location.search.includes('skip_redirect=true')) {
+      console.log('Redirection skipped by user');
+      return;
+    }
+
+    const domainsCollection = collection(db, 'managedDomains');
+    const q = query(domainsCollection, orderBy('createdAt', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      try {
+        const domainsList = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as ManagedDomain[];
+        setManagedDomains(domainsList);
+
+        // Handle dynamic redirection logic
+        const host = window.location.hostname.toLowerCase();
+        
+        // 1. Check for explicit redirection rule for current host
+        const rule = domainsList.find(d => d.name.toLowerCase() === host);
+        if (rule && rule.mode === 'redirect' && rule.target) {
+          try {
+            const targetUrlString = rule.target.startsWith('http') ? rule.target : `https://${rule.target}`;
+            const targetUrl = new URL(targetUrlString);
+            
+            // Only redirect if it's a different domain or path to avoid infinite loops
+            if (targetUrl.hostname.toLowerCase() !== host || targetUrl.pathname !== window.location.pathname) {
+              console.log(`Redirecting to: ${targetUrl.href}`);
+              setIsRedirecting(true);
+              window.location.href = targetUrl.href;
+              return;
+            }
+          } catch (e) {
+            console.error("Invalid redirect target:", rule.target);
+          }
+        }
+
+        // 2. Handle Default Domain redirection (if current host is not configured)
+        const defaultDomain = domainsList.find(d => d.isDefault);
+        const hostIsDevOrPreview = host.includes('localhost') || 
+                                   host.includes('.run.app') || 
+                                   host.includes('.googleusercontent.com') ||
+                                   host.includes('.firebaseapp.com') ||
+                                   host.includes('.web.app') ||
+                                   host.includes('127.0.0.1');
+
+        if (defaultDomain && defaultDomain.name.toLowerCase() !== host && !hostIsDevOrPreview) {
+          const matchingDomain = domainsList.find(d => d.name.toLowerCase() === host);
+          if (!matchingDomain || matchingDomain.mode !== 'serve') {
+            console.log(`Default domain redirect to: ${defaultDomain.name}`);
+            setIsRedirecting(true);
+            window.location.href = `https://${defaultDomain.name}${window.location.pathname}${window.location.search}`;
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Domain logic processing error:", err);
+      }
+    }, (error) => {
+      console.warn("managedDomains snapshot error (safe to ignore if collection is new or empty):", error);
+    });
+
+    return () => unsubscribe();
+  }, [isAdmin]);
+
+  const handleUpdateDomain = async (domainId: string, data: Partial<ManagedDomain>) => {
+    try {
+      if (data.isDefault) {
+        // Unset other defaults
+        const otherDefaults = managedDomains.filter(d => d.isDefault && d.id !== domainId);
+        for (const d of otherDefaults) {
+          await updateDoc(doc(db, 'managedDomains', d.id), { isDefault: false });
+        }
+      }
+      await updateDoc(doc(db, 'managedDomains', domainId), {
+        ...data,
+        updatedAt: serverTimestamp()
+      });
+      setShowDomainEditModal(false);
+      setEditingDomain(null);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `managedDomains/${domainId}`);
+    }
+  };
+
+  const handleAddDomain = async (name: string, mode: 'serve' | 'redirect', target?: string, isDefault?: boolean) => {
+    try {
+      if (isDefault) {
+        // Unset other defaults
+        const otherDefaults = managedDomains.filter(d => d.isDefault);
+        for (const d of otherDefaults) {
+          await updateDoc(doc(db, 'managedDomains', d.id), { isDefault: false });
+        }
+      }
+      await addDoc(collection(db, 'managedDomains'), {
+        name,
+        mode,
+        target: target || '',
+        isDefault: !!isDefault,
+        createdAt: serverTimestamp()
+      });
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'managedDomains');
+    }
+  };
+
+  const handleDeleteDomain = async (domainId: string) => {
+    if (!window.confirm('Are you sure you want to delete this domain?')) return;
+    try {
+      await deleteDoc(doc(db, 'managedDomains', domainId));
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `managedDomains/${domainId}`);
+    }
+  };
 
   // Firebase Chats
   React.useEffect(() => {
@@ -2818,10 +2991,12 @@ export default function App() {
   // Multi-Country Logic based on domain
   const getCountryFromDomain = () => {
     const host = window.location.hostname;
+    // Explicitly check for Nigeria domains
+    if (host.endsWith('.ng') || host.includes('sesewa.ng')) return { name: 'Nigeria', slogan: 'anywhere in Nigeria', currency: 'NGN', jurisdiction: 'The Federal Republic of Nigeria', law: 'Nigerian Law', compliance: 'Nigeria Data Protection Regulation (NDPR)' };
     if (host.endsWith('.gh')) return { name: 'Ghana', slogan: 'anywhere in Ghana', currency: 'GHS', jurisdiction: 'The Republic of Ghana', law: 'Ghanaian Law', compliance: 'Data Protection Act, 2012 (Act 843)' };
     if (host.endsWith('.ke')) return { name: 'Kenya', slogan: 'anywhere in Kenya', currency: 'KES', jurisdiction: 'The Republic of Kenya', law: 'Kenyan Law', compliance: 'Data Protection Act (DPA), 2019' };
     if (host.endsWith('.za')) return { name: 'South Africa', slogan: 'anywhere in South Africa', currency: 'ZAR', jurisdiction: 'The Republic of South Africa', law: 'South African Law', compliance: 'Protection of Personal Information Act (POPIA)' };
-    // Default to Nigeria
+    // Default to Nigeria for localhost and others
     return { name: 'Nigeria', slogan: 'anywhere in Nigeria', currency: 'NGN', jurisdiction: 'The Federal Republic of Nigeria', law: 'Nigerian Law', compliance: 'Nigeria Data Protection Regulation (NDPR)' };
   };
 
@@ -2898,19 +3073,84 @@ export default function App() {
     }
   };
 
-  if (!isAuthReady) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-center">
-        <Logo className="w-24 h-24 mb-8 animate-pulse" />
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-6"></div>
-        <h1 className="text-2xl font-bold text-white mb-2">Ṣe Ṣe Wá</h1>
-        <p className="text-slate-400">Loading marketplace... please wait.</p>
-      </div>
-    );
-  }
-
   return (
     <ErrorBoundary>
+      {renderContent()}
+    </ErrorBoundary>
+  );
+
+  function renderContent() {
+    if (!isAuthReady) {
+      return (
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-center">
+          <Sparkles className="w-24 h-24 mb-8 animate-pulse text-blue-500" />
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-6"></div>
+          <h1 className="text-2xl font-bold text-white mb-2">Ṣe Ṣe Wá</h1>
+          <p className="text-slate-400 font-medium">Initializing secure marketplace...</p>
+          <p className="text-slate-600 text-xs mt-4">Connecting to core services</p>
+        </div>
+      );
+    }
+
+    if (initError) {
+      return (
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-center">
+          <AlertTriangle className="w-16 h-16 text-amber-500 mb-6" />
+          <h1 className="text-xl font-bold text-white mb-4">Initialization Issue</h1>
+          <div className="bg-black/40 p-4 rounded-lg text-left max-w-2xl w-full overflow-auto max-h-[50vh] border border-white/10">
+            <pre className="text-pink-400 text-xs font-mono whitespace-pre-wrap">{initError}</pre>
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-8 px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all"
+          >
+            Try Reloading
+          </button>
+          <p className="mt-4 text-slate-500 text-sm">
+            If you see "Missing permissions", check your Firebase Security Rules.
+          </p>
+        </div>
+      );
+    }
+
+    if (isRedirecting) {
+      const host = window.location.hostname.toLowerCase();
+      const defaultDomain = managedDomains.find(d => d && d.isDefault);
+      const domainRule = managedDomains.find(d => d && d.name && d.name.toLowerCase() === host);
+      
+      let target = null;
+      if (domainRule && domainRule.mode === 'redirect' && domainRule.target) {
+        target = domainRule.target.startsWith('http') ? domainRule.target : `https://${domainRule.target}`;
+      } else if (defaultDomain && defaultDomain.name && defaultDomain.name.toLowerCase() !== host) {
+        target = `https://${defaultDomain.name}${window.location.pathname}${window.location.search}`;
+      }
+
+      return (
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white/5 backdrop-blur-xl border border-white/10 p-12 rounded-[2.5rem] max-w-md w-full shadow-2xl"
+          >
+            <div className="w-20 h-20 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-8" />
+            <h1 className="text-2xl font-black text-white mb-4 tracking-tighter">Redirecting...</h1>
+            <p className="text-slate-400 font-medium leading-relaxed mb-6">
+              We are taking you to the correct version of Ṣe Ṣe Wá for your region.
+            </p>
+            {target && (
+              <a 
+                href={target}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/20"
+              >
+                Click here if not redirected <ChevronRight size={18} />
+              </a>
+            )}
+          </motion.div>
+        </div>
+      );
+    }
+
+    return (
       <div className="min-h-screen bg-slate-50 text-slate-900 font-sans overflow-x-hidden">
       {/* Success Message */}
       <AnimatePresence>
@@ -4930,6 +5170,138 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+
+                {/* Domain Management Section */}
+                <div className="mt-12 mb-12">
+                  <div className="flex items-center justify-between mb-6 px-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-blue-50 rounded-lg">
+                        <Globe className="text-blue-600" size={20} />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900">Domain Routing</h3>
+                      <span className="bg-slate-100 text-slate-500 text-xs font-bold px-2 py-0.5 rounded-full border border-slate-200">
+                        {managedDomains.length}
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setEditingDomain(null);
+                        setShowDomainEditModal(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/10"
+                    >
+                      <Plus size={16} />
+                      Add Domain
+                    </button>
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-[2rem] overflow-hidden shadow-sm">
+                    {managedDomains.length === 0 ? (
+                      <div className="p-16 text-center">
+                        <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-200 mx-auto mb-4 border-2 border-dashed border-slate-100">
+                          <Globe size={32} />
+                        </div>
+                        <p className="text-slate-400 font-medium text-sm">No domains configured for specific routing.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse min-w-[600px]">
+                          <thead>
+                            <tr className="bg-slate-50/50 border-b border-slate-100 font-bold text-[10px] text-slate-400 uppercase tracking-[0.2em]">
+                              <th className="px-8 py-5">Source Domain</th>
+                              <th className="px-8 py-5">Routing Mode</th>
+                              <th className="px-8 py-5">Target</th>
+                              <th className="px-8 py-5 text-right">Settings</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {managedDomains.map(domain => (
+                              <tr key={domain.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/30 transition-colors">
+                                <td className="px-8 py-6">
+                                  <div className="flex flex-col">
+                                    <span className="font-bold text-slate-900">{domain.name}</span>
+                                    {domain.isDefault && (
+                                      <span className="inline-flex items-center gap-1 text-[9px] font-black text-blue-600 uppercase tracking-tighter mt-1">
+                                        <Star size={8} fill="currentColor" /> Primary Domain
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-8 py-6">
+                                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                    domain.mode === 'serve' 
+                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
+                                    : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                                  }`}>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${domain.mode === 'serve' ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
+                                    {domain.mode === 'serve' ? 'Serve Traffic' : 'Redirect'}
+                                  </span>
+                                </td>
+                                <td className="px-8 py-6 text-sm text-slate-500">
+                                  {domain.mode === 'redirect' ? (
+                                    <span className="font-mono text-indigo-600/60 text-xs">{domain.target || 'None'}</span>
+                                  ) : (
+                                    <span className="text-slate-300">Local Instance</span>
+                                  )}
+                                </td>
+                                <td className="px-8 py-6 text-right relative">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDomainMenuOpen(domainMenuOpen === domain.id ? null : domain.id);
+                                    }}
+                                    className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-white rounded-xl transition-all border border-transparent hover:border-slate-100 shadow-sm hover:shadow-md"
+                                  >
+                                    <MoreVertical size={16} />
+                                  </button>
+                                  
+                                  <AnimatePresence>
+                                    {domainMenuOpen === domain.id && (
+                                      <>
+                                        <div 
+                                          className="fixed inset-0 z-[100]" 
+                                          onClick={() => setDomainMenuOpen(null)} 
+                                        />
+                                        <motion.div
+                                          initial={{ opacity: 0, scale: 0.95, x: 10, y: -10 }}
+                                          animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+                                          exit={{ opacity: 0, scale: 0.95, x: 10, y: -10 }}
+                                          className="absolute right-8 top-16 w-40 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[110] overflow-hidden py-1"
+                                        >
+                                          <button 
+                                            onClick={() => {
+                                              setEditingDomain(domain);
+                                              setShowDomainEditModal(true);
+                                              setDomainMenuOpen(null);
+                                            }}
+                                            className="w-full text-left px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                                          >
+                                            <Edit size={14} className="text-slate-400" />
+                                            Edit Policy
+                                          </button>
+                                          <button 
+                                            onClick={() => {
+                                              handleDeleteDomain(domain.id);
+                                              setDomainMenuOpen(null);
+                                            }}
+                                            className="w-full text-left px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                                          >
+                                            <Trash2 size={14} />
+                                            Delete
+                                          </button>
+                                        </motion.div>
+                                      </>
+                                    )}
+                                  </AnimatePresence>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </motion.div>
           </div>
@@ -5010,6 +5382,141 @@ export default function App() {
                   <button type="submit" className="flex-1 py-4 rounded-2xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2">
                     <Zap size={18} />
                     Send Request
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Domain Edit/Create Modal */}
+      <AnimatePresence>
+        {showDomainEditModal && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDomainEditModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl p-8 overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-6">
+                <button 
+                  onClick={() => setShowDomainEditModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-900 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="mb-8">
+                <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 mb-4">
+                  <Globe size={24} />
+                </div>
+                <h2 className="text-2xl font-black text-slate-900">{editingDomain ? 'Update Routing' : 'Add New Domain'}</h2>
+                <p className="text-slate-500 font-medium text-sm mt-1">Configure domain behavior and traffic rules.</p>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const name = fd.get('name') as string;
+                const mode = fd.get('mode') as 'serve' | 'redirect';
+                const target = fd.get('target') as string;
+                const isDefault = fd.get('isDefault') === 'on';
+                
+                if (editingDomain) {
+                   handleUpdateDomain(editingDomain.id, { name, mode, target, isDefault });
+                } else {
+                   handleAddDomain(name, mode, target, isDefault);
+                }
+                setShowDomainEditModal(false);
+              }} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Domain Name</label>
+                  <input 
+                    name="name" 
+                    defaultValue={editingDomain?.name}
+                    placeholder="e.g., app.nigeriahandy.com" 
+                    required 
+                    className="w-full p-4 rounded-2xl border-2 border-slate-100 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-slate-900 placeholder:text-slate-300" 
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Policy Mode</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className={`relative flex items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                      editingDomain?.mode === 'serve' || !editingDomain ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 hover:border-slate-200'
+                    }`}>
+                      <input type="radio" name="mode" value="serve" defaultChecked={editingDomain?.mode === 'serve' || !editingDomain} className="sr-only" />
+                      <div className="flex flex-col items-center gap-1">
+                        <Zap size={16} className={editingDomain?.mode === 'serve' || !editingDomain ? 'text-blue-600' : 'text-slate-400'} />
+                        <span className={`text-xs font-bold ${editingDomain?.mode === 'serve' || !editingDomain ? 'text-blue-900' : 'text-slate-500'}`}>Serve</span>
+                      </div>
+                    </label>
+                    <label className={`relative flex items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                      editingDomain?.mode === 'redirect' ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-200'
+                    }`}>
+                      <input type="radio" name="mode" value="redirect" defaultChecked={editingDomain?.mode === 'redirect'} className="sr-only" />
+                      <div className="flex flex-col items-center gap-1">
+                        <RotateCcw size={16} className={editingDomain?.mode === 'redirect' ? 'text-indigo-600' : 'text-slate-400'} />
+                        <span className={`text-xs font-bold ${editingDomain?.mode === 'redirect' ? 'text-indigo-900' : 'text-slate-500'}`}>Redirect</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Target (Optional)</label>
+                  <input 
+                    name="target" 
+                    defaultValue={editingDomain?.target}
+                    placeholder="e.g., https://main-site.com" 
+                    className="w-full p-4 rounded-2xl border-2 border-slate-100 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-mono text-xs text-slate-600" 
+                  />
+                  <p className="text-[10px] text-slate-400 italic ml-1">Leave empty for Local Instance routing.</p>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <div className="relative">
+                      <input 
+                        type="checkbox" 
+                        name="isDefault" 
+                        defaultChecked={editingDomain?.isDefault}
+                        className="sr-only peer" 
+                      />
+                      <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 transition-all after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-slate-700 group-hover:text-slate-900 transition-colors">Mark as Default Domain</span>
+                      <p className="text-[10px] text-slate-400">Sets this as the primary entry point for routing logic.</p>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowDomainEditModal(false)} 
+                    className="flex-1 py-4 rounded-2xl font-bold text-slate-400 hover:bg-slate-50 transition-all active:scale-95"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-1 py-4 rounded-2xl font-bold bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <ShieldCheck size={18} />
+                    {editingDomain ? 'Update Rule' : 'Save Routing'}
                   </button>
                 </div>
               </form>
@@ -5699,6 +6206,6 @@ export default function App() {
         <Toaster position="top-right" richColors />
       </div>
       </div>
-    </ErrorBoundary>
-  );
+    );
+  }
 }
