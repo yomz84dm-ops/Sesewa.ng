@@ -3,15 +3,14 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 
-// This is a completely self-contained Express app for Firebase.
-// No external bundles, no resolution errors.
+// Version: 1.0.2 - Self-contained Marketplace API
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
 
 // API health check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", service: "Ṣe Ṣe Wá Marketplace API" });
 });
 
 // Paystack Integration

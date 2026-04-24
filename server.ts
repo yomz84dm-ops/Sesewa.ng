@@ -79,10 +79,11 @@ export async function createApi() {
 }
 
 // Development and Cloud Run mode
-// We only listen on a port if we are NOT in the Firebase Functions environment.
-const isFirebase = process.env.FUNCTIONS_EMULATOR || process.env.FIREBASE_CONFIG || process.env.GCLOUD_PROJECT;
+// FUNCTIONS_EMULATOR and FIREBASE_CONFIG are specific to the Function environment.
+// GCLOUD_PROJECT can be present in both, so we use it as a fallback but prioritize the others.
+const isFunctionEnv = process.env.FUNCTIONS_EMULATOR || process.env.FIREBASE_CONFIG;
 
-if (!isFirebase && process.env.NODE_ENV !== "test") {
+if (!isFunctionEnv && process.env.NODE_ENV !== "test") {
   createApi().then(async (app) => {
     // In dev mode, we also mount the Vite middleware
     if (process.env.NODE_ENV !== "production") {

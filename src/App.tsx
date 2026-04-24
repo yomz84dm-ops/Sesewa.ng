@@ -1866,7 +1866,8 @@ export default function App() {
       
       setHandymen(dbHandymen);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'handymen');
+      console.error("Handymen feed error:", error);
+      toast.error("Low data or connection issue. Some features may be limited.");
     });
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -5392,7 +5393,7 @@ export default function App() {
         <div className="flex items-center gap-6 text-xs font-bold text-slate-400 uppercase tracking-widest">
           <button onClick={() => setShowTerms(true)} className="hover:text-blue-600 transition-colors">Terms of Service</button>
           <button onClick={() => setShowPrivacy(true)} className="hover:text-blue-600 transition-colors">Privacy Policy</button>
-          <a href="mailto:support@sesewa.app" className="hover:text-blue-600 transition-colors">Support</a>
+          <a href="mailto:support@sesewa.ng" className="hover:text-blue-600 transition-colors">Support</a>
         </div>
 
         <p className="text-slate-400 text-sm">
@@ -5561,7 +5562,7 @@ export default function App() {
                     4. Contact Our Data Protection Officer
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    If you have questions about your data or wish to exercise your rights under the {currentMarket.compliance}, please contact us at <strong>privacy@sesewa.app</strong>.
+                    If you have questions about your data or wish to exercise your rights under the {currentMarket.compliance}, please contact us at <strong>privacy@sesewa.ng</strong>.
                   </p>
                 </section>
               </div>

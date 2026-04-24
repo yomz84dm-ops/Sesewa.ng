@@ -211,7 +211,7 @@ export const geminiService = {
    */
   async speakWelcome(language: string) {
     const ai = getAi();
-    const ttsModel = "gemini-2.5-flash-preview-tts";
+    const ttsModel = "gemini-3.1-flash-tts-preview";
     const translationModel = "gemini-3-flash-preview";
     
     const originalText = `Welcome to Ṣe Ṣe Wá HandyPadi, your trusted partner for all home services in Nigeria. How can we help you today?`;
