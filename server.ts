@@ -2,14 +2,18 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 dotenv.config();
 
+// Standard AI Models
+const PREVIEW_TEXT_MODEL = "gemini-3-flash-preview";
+const PREVIEW_TTS_MODEL = "gemini-3.1-flash-tts-preview";
+
 // This function creates the Express app without starting the server.
-// This is safe for both local development and Firebase Functions analysis.
 export async function createApi() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' })); // Increase limit for images
   app.use(cors());
 
   // API health check
@@ -72,6 +76,91 @@ export async function createApi() {
     } catch (error: any) {
       console.error("Paystack verification error:", error.response?.data || error.message);
       res.status(500).json({ error: "Failed to verify payment" });
+    }
+  });
+
+  // --- Gemini AI Proxy Support ---
+  const GEMINI_KEY = process.env.GEMINI_API_KEY;
+  const getAiInstance = () => {
+    if (!GEMINI_KEY) return null;
+    return new GoogleGenAI(GEMINI_KEY);
+  };
+
+  app.post("/api/ai/generate", async (req, res) => {
+    try {
+      const { prompt, config, model: modelOverride, contents } = req.body;
+      const ai = getAiInstance();
+      if (!ai) return res.status(500).json({ error: "Gemini API key not configured on server" });
+
+      const modelName = modelOverride || PREVIEW_TEXT_MODEL;
+      const model = ai.getGenerativeModel({ model: modelName });
+      
+      const result = await model.generateContent(contents || prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      res.json({ text });
+    } catch (error: any) {
+      console.error("AI Proxy Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      const { message, history, systemInstruction } = req.body;
+      const ai = getAiInstance();
+      if (!ai) return res.status(500).json({ error: "Gemini API key not configured on server" });
+
+      const model = ai.getGenerativeModel({ 
+        model: PREVIEW_TEXT_MODEL,
+        systemInstruction: systemInstruction || "You are a helpful assistant."
+      });
+
+      const chat = model.startChat({
+        history: history || [],
+      });
+
+      const result = await chat.sendMessage(message);
+      const response = await result.response;
+      const text = response.text();
+
+      res.json({ text });
+    } catch (error: any) {
+      console.error("AI Chat Proxy Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/ai/speak", async (req, res) => {
+    try {
+      const { text, model: modelOverride } = req.body;
+      const ai = getAiInstance();
+      if (!ai) return res.status(500).json({ error: "Gemini API key not configured on server" });
+
+      const modelName = modelOverride || PREVIEW_TTS_MODEL;
+      const model = ai.getGenerativeModel({ model: modelName });
+
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text }] }],
+        generationConfig: {
+          responseModalities: ["audio"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: 'Zephyr' },
+            },
+          },
+        },
+      });
+
+      const response = await result.response;
+      const audioPart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+      const base64Audio = audioPart?.inlineData?.data;
+      
+      res.json({ audio: base64Audio });
+    } catch (error: any) {
+      console.error("AI TTS Proxy Error:", error.message);
+      res.status(500).json({ error: error.message });
     }
   });
 

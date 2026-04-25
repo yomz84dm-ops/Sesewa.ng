@@ -92,6 +92,7 @@ import {
   setDoc, 
   getDoc,
   updateDoc,
+  runTransaction,
   getDocFromServer,
   deleteDoc,
   Timestamp
@@ -848,16 +849,7 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const d = R * c; // Distance in km
   return d;
 }
-const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371; // km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
+
 
 // --- Components ---
 const StarRating = ({ rating, onRate, interactive = false }: { rating: number, onRate?: (r: number) => void, interactive?: boolean }) => {
@@ -1287,10 +1279,26 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
   const handlePlay = async () => {
     if (isPlaying) {
       if (sourceNodeRef.current) {
-        sourceNodeRef.current.stop();
+        try {
+          sourceNodeRef.current.stop();
+        } catch (e) {
+          // Ignore if already stopped
+        }
       }
       setIsPlaying(false);
       return;
+    }
+
+    // Initialize AudioContext immediately on user gesture to avoid "two clicks" issue
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: 24000
+      });
+    }
+
+    const ctx = audioContextRef.current;
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
     }
 
     setIsLoading(true);
@@ -1302,18 +1310,6 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
           description: "Try again in a few moments."
         });
         return;
-      }
-
-      // Initialize AudioContext on user gesture
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
-          sampleRate: 24000
-        });
-      }
-
-      const ctx = audioContextRef.current;
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
       }
 
       // Decode base64 to ArrayBuffer
@@ -1352,15 +1348,18 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
   };
 
   useEffect(() => {
+    // Pre-warm the cache for the current language
+    geminiService.speakWelcome(lang).catch(() => {});
+
     return () => {
       if (sourceNodeRef.current) {
-        sourceNodeRef.current.stop();
+        try { sourceNodeRef.current.stop(); } catch (e) {}
       }
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
     };
-  }, []);
+  }, [lang]);
 
   return (
     <div className="flex items-center gap-1 sm:gap-3">
@@ -1378,8 +1377,8 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       >
         {isLoading ? (
           <>
-            <RotateCcw className="animate-spin" size={16} className="sm:w-[18px] sm:h-[18px]" />
-            <span className="text-[10px] sm:text-xs font-bold hidden sm:inline">Translating...</span>
+            <RotateCcw className="animate-spin" size={16} />
+            <span className="text-[10px] sm:text-xs font-bold hidden sm:inline">Processing...</span>
           </>
         ) : isPlaying ? (
           <>
@@ -2483,7 +2482,7 @@ export default function App() {
       
       let matchesRadius = true;
       if (userLocation && useRadiusFilter) {
-        const dist = calculateDistance(userLocation.lat, userLocation.lng, h.lat || 0, h.lng || 0);
+        const dist = getDistance(userLocation.lat, userLocation.lng, h.lat || 0, h.lng || 0);
         matchesRadius = dist <= RADIUS_KM;
       }
 
@@ -2500,8 +2499,8 @@ export default function App() {
         if (a.isFeatured && !b.isFeatured) return -1;
         if (!a.isFeatured && b.isFeatured) return 1;
 
-        const distA = calculateDistance(userLocation.lat, userLocation.lng, a.lat, a.lng);
-        const distB = calculateDistance(userLocation.lat, userLocation.lng, b.lat, b.lng);
+        const distA = getDistance(userLocation.lat, userLocation.lng, a.lat, a.lng);
+        const distB = getDistance(userLocation.lat, userLocation.lng, b.lat, b.lng);
         return distA - distB;
       });
     } else {
@@ -2636,36 +2635,50 @@ export default function App() {
   const handleUnlockLead = async (requestId: string) => {
     if (!currentUser || currentUser.role !== 'handyman') return;
     
-    const currentCredits = currentUser.credits || 0;
-    if (currentCredits < 1) {
-      setShowOutOfCredits(true);
-      return;
-    }
+    const userRef = doc(db, 'users', currentUser.uid);
+    const requestRef = doc(db, 'jobRequests', requestId);
 
     try {
-      const requestRef = doc(db, 'jobRequests', requestId);
-      const requestDoc = await getDoc(requestRef);
-      
-      if (requestDoc.exists()) {
-        const data = requestDoc.data() as JobRequest;
-        const unlockedBy = data.unlockedBy || [];
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userRef);
+        const requestDoc = await transaction.get(requestRef);
+
+        if (!userDoc.exists()) throw new Error("User document missing");
+        if (!requestDoc.exists()) throw new Error("Job request missing");
+
+        const userData = userDoc.data() as AppUser;
+        const requestData = requestDoc.data() as JobRequest;
         
-        if (!unlockedBy.includes(currentUser.uid)) {
-          await updateDoc(requestRef, {
-            unlockedBy: [...unlockedBy, currentUser.uid]
-          });
-          
-          // Deduct credit
-          await updateDoc(doc(db, 'users', currentUser.uid), {
-            credits: currentCredits - 1
-          });
-          
-          setShowSuccess(true);
-          setTimeout(() => setShowSuccess(false), 3000);
+        const unlockedBy = requestData.unlockedBy || [];
+        const currentCredits = userData.credits || 0;
+
+        if (unlockedBy.includes(currentUser.uid)) {
+          return; // Already unlocked
         }
+
+        if (currentCredits < 1) {
+          throw new Error("INSUFFICIENT_CREDITS");
+        }
+
+        // Atomic update of both request and user credits
+        transaction.update(requestRef, {
+          unlockedBy: [...unlockedBy, currentUser.uid]
+        });
+
+        transaction.update(userRef, {
+          credits: currentCredits - 1
+        });
+      });
+
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+      toast.success("Lead unlocked successfully!");
+    } catch (error: any) {
+      if (error.message === "INSUFFICIENT_CREDITS") {
+        setShowOutOfCredits(true);
+      } else {
+        handleFirestoreError(error, OperationType.UPDATE, `jobRequests/${requestId}/unlock`);
       }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, 'jobRequests');
     }
   };
 
@@ -4505,7 +4518,7 @@ export default function App() {
                             <MapPin size={14} /> {handy.location}
                             {userLocation && (
                               <span className="text-blue-500 font-bold ml-1">
-                                ({calculateDistance(userLocation.lat, userLocation.lng, handy.lat, handy.lng).toFixed(1)}km)
+                                ({getDistance(userLocation.lat, userLocation.lng, handy.lat, handy.lng).toFixed(1)}km)
                               </span>
                             )}
                           </span>
