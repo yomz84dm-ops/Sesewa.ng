@@ -59,6 +59,7 @@
       "properties": {
         "id": { "type": "string" },
         "proId": { "type": "string" },
+        "proUserId": { "type": "string", "description": "UID of the professional" },
         "proName": { "type": "string" },
         "userUid": { "type": "string" },
         "userName": { "type": "string" },

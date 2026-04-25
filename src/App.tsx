@@ -66,7 +66,8 @@ import {
   MoreVertical,
   Trash2,
   Edit,
-  X
+  X,
+  Tag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -100,53 +101,11 @@ import { Toaster, toast } from 'sonner';
 import { Logo } from './components/Logo';
 import { t } from './translations';
 import { getPriceEstimation, PriceEstimation } from './services/aiService';
-import { auth, db, storage, OperationType } from './firebase';
+import { auth, db, storage, OperationType, handleFirestoreError } from './firebase';
 import { geminiService } from './services/geminiService';
 
 // --- Enums ---
 // OperationType is imported from ./firebase
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string;
-    email?: string | null;
-    emailVerified?: boolean;
-    isAnonymous?: boolean;
-    tenantId?: string | null;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
-  }
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
-    operationType,
-    path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -253,6 +212,7 @@ interface AppUser {
 interface JobRequest {
   id: string;
   proId: string;
+  proUserId?: string;
   proName: string;
   userUid: string;
   userName: string;
@@ -1338,6 +1298,9 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       const base64Audio = await geminiService.speakWelcome(lang);
       if (!base64Audio) {
         setIsLoading(false);
+        toast.error("HandyPadi voice is unavailable in this language right now.", {
+          description: "Try again in a few moments."
+        });
         return;
       }
 
@@ -1400,11 +1363,11 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
   }, []);
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-1 sm:gap-3">
       <button 
         onClick={handlePlay}
         disabled={isLoading}
-        className={`p-3 rounded-full transition-all flex items-center gap-2 ${
+        className={`p-1.5 sm:p-3 rounded-full transition-all flex items-center gap-1 sm:gap-2 ${
           isPlaying 
             ? 'bg-blue-100 text-blue-600' 
             : isLoading
@@ -1415,18 +1378,18 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       >
         {isLoading ? (
           <>
-            <RotateCcw className="animate-spin" size={18} />
-            <span className="text-xs font-bold">Translating...</span>
+            <RotateCcw className="animate-spin" size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <span className="text-[10px] sm:text-xs font-bold hidden sm:inline">Translating...</span>
           </>
         ) : isPlaying ? (
           <>
-            <RotateCcw className="animate-spin" size={18} />
-            <span className="text-xs font-bold">Playing...</span>
+            <RotateCcw className="animate-spin" size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <span className="text-[10px] sm:text-xs font-bold hidden sm:inline">Playing...</span>
           </>
         ) : (
           <>
-            <Radio size={18} />
-            <span className="text-xs font-bold">Listen in {lang}</span>
+            <Radio size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <span className="text-[10px] sm:text-xs font-bold hidden sm:inline">Listen in {lang}</span>
           </>
         )}
       </button>
@@ -1695,23 +1658,13 @@ export default function App() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const isDebug = window.location.search.includes('debug=true') || 
-                  window.location.hostname.includes('localhost') || 
-                  window.location.hostname.includes('.web.app') || 
-                  window.location.hostname.includes('.firebaseapp.com');
+                  window.location.hostname.includes('localhost');
 
   const handleLoggedError = (error: any, type: string, path: string) => {
     console.error(`[${type}] ${path}:`, error);
     const msg = error.message || String(error);
     if (isDebug) {
       setInitError(prev => `${prev ? prev + '\n' : ''}[${type}] ${path}: ${msg}`);
-    }
-    // Only throw if not in debug mode or if it's critical
-    if (!isDebug) {
-      try {
-        handleFirestoreError(error, type as any, path);
-      } catch (e) {
-        console.error("Error handler fallback:", e);
-      }
     }
   };
 
@@ -1760,6 +1713,32 @@ export default function App() {
     'Tiv', 'Ibibio', 'Kanuri', 'Fulfulde', 'Efik', 
     'Itsekiri', 'Urhobo', 'Izon', 'Nupe', 'Igala', 'Idoma'
   ];
+
+  useEffect(() => {
+    // Check AI readiness
+    const checkAI = async () => {
+      try {
+        const key = 
+          process.env.GEMINI_API_KEY || 
+          process.env.API_KEY || 
+          process.env.VITE_GEMINI_API_KEY || 
+          (import.meta.env?.GEMINI_API_KEY as string);
+
+        if (!key || key.length < 5) {
+          console.error("AI Service Error: AI keys are missing or invalid in environment.");
+          toast.warning("AI Assistant Delayed", { 
+            description: "Some AI features might be limited. Please ensure your GEMINI_API_KEY is configured in Settings and that you have restarted the dev server.",
+            duration: 15000
+          });
+        } else {
+          console.log("AI Service Ready (Key detected)");
+        }
+      } catch (e) {
+        console.error("AI Service Error: Could not check AI keys.", e);
+      }
+    };
+    checkAI();
+  }, []);
 
   const [handymen, setHandymen] = useState<Handyman[]>(INITIAL_HANDYMEN);
 
@@ -1910,10 +1889,18 @@ export default function App() {
       toast.error("Low data or connection issue. Some features may be limited.");
     });
 
+    let unsubscribeUserDoc: (() => void) | null = null;
+    
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      // Clear previous user subscription if any
+      if (unsubscribeUserDoc) {
+        unsubscribeUserDoc();
+        unsubscribeUserDoc = null;
+      }
+
       if (user) {
         // Use onSnapshot for real-time user data updates (credits, plan, etc.)
-        const unsubscribeUser = onSnapshot(doc(db, 'users', user.uid), async (userDoc) => {
+        unsubscribeUserDoc = onSnapshot(doc(db, 'users', user.uid), async (userDoc) => {
           try {
             if (userDoc.exists()) {
               const userData = userDoc.data() as AppUser;
@@ -1942,7 +1929,7 @@ export default function App() {
             handleLoggedError(err, OperationType.GET, `users/${user.uid}`);
           }
         }, (error) => {
-          handleLoggedError(error, OperationType.LIST, 'users');
+          handleLoggedError(error, OperationType.GET, `users/${user.uid}`);
         });
 
         // Reset view to home page and all filters upon login
@@ -1957,8 +1944,6 @@ export default function App() {
         setShowOnlyOnline(false);
         setShowFavoritesOnly(false);
         setUseRadiusFilter(false);
-
-        return () => unsubscribeUser();
       } else {
         setCurrentUser(null);
       }
@@ -1967,6 +1952,7 @@ export default function App() {
     });
 
     return () => {
+      if (unsubscribeUserDoc) unsubscribeUserDoc();
       unsubscribeHandymen();
       unsubscribeAuth();
     };
@@ -2239,12 +2225,22 @@ export default function App() {
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
       setShowAuthModal(false);
+      toast.success(t(currentLanguage, 'welcomeBack'));
     } catch (error: any) {
       if (error.code === 'auth/popup-closed-by-user') {
         console.log('User cancelled login.');
       } else {
         console.error('Login Error:', error);
-        setAuthError(error.message);
+        let errorMessage = error.message;
+        if (error.code === 'auth/operation-not-allowed') {
+          errorMessage = "Google sign-in is not enabled for this project.";
+        } else if (error.code === 'auth/popup-blocked') {
+          errorMessage = "Popup was blocked by your browser. Please allow popups.";
+        } else if (error.code === 'auth/admin-restricted-operation') {
+          errorMessage = "Google login is restricted. Please check your project settings.";
+        }
+        setAuthError(errorMessage);
+        toast.error("Login Error", { description: errorMessage });
       }
     }
   };
@@ -2266,16 +2262,37 @@ export default function App() {
       if (authMode === 'login') {
         await signInWithEmailAndPassword(auth, authEmail, authPassword);
         setShowAuthModal(false);
+        toast.success(t(currentLanguage, 'welcomeBack'));
       } else if (authMode === 'signup') {
         await createUserWithEmailAndPassword(auth, authEmail, authPassword);
         setShowAuthModal(false);
+        toast.success(t(currentLanguage, 'accountCreated'));
       } else if (authMode === 'reset') {
         await sendPasswordResetEmail(auth, authEmail);
         setResetSent(true);
+        toast.success(t(currentLanguage, 'resetEmailSent'));
       }
     } catch (error: any) {
       console.error('Auth Error:', error);
-      setAuthError(error.message);
+      let errorMessage = error.message;
+      
+      // Map common Firebase auth errors to more user-friendly messages if needed
+      if (error.code === 'auth/operation-not-allowed') {
+        errorMessage = "Email/Password sign-in is not enabled. Please contact support.";
+      } else if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "An account already exists with this email.";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "Password is too weak. Please use at least 6 characters.";
+      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        errorMessage = "Invalid email or password.";
+      } else if (error.code === 'auth/admin-restricted-operation') {
+        errorMessage = "This operation is restricted. Please check your permissions.";
+      } else if (error.code === 'auth/popup-blocked') {
+        errorMessage = "Popup was blocked by your browser. Please allow popups for this site.";
+      }
+
+      setAuthError(errorMessage);
+      toast.error("Authentication Error", { description: errorMessage });
     } finally {
       setAuthLoading(false);
     }
@@ -2357,7 +2374,7 @@ export default function App() {
 
     const q = query(
       collection(db, 'jobRequests'),
-      where(currentUser.role === 'handyman' ? 'proId' : 'userUid', '==', currentUser.uid),
+      where(currentUser.role === 'handyman' ? 'proUserId' : 'userUid', '==', currentUser.uid),
       orderBy('date', 'desc')
     );
 
@@ -2404,17 +2421,43 @@ export default function App() {
   const handleGetLocation = () => {
     setLocationError(null);
     if (navigator.geolocation) {
+      toast.info("Requesting location access...", { description: "Please look for the browser prompt." });
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          toast.success("Location updated!");
         },
         (err) => {
           console.error(err);
-          setLocationError("Unable to get location. Please check your permissions.");
-        }
+          let msg = "Unable to get location.";
+          if (err.code === 1) msg = "Location access denied. Please enable it in browser settings.";
+          else if (err.code === 2) msg = "Location unavailable. Try moving to an open area.";
+          else if (err.code === 3) msg = "Location request timed out. Retrying with lower accuracy...";
+          
+          if (err.code === 3) {
+            // Retry once with lower accuracy
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                toast.success("Location updated (Low Accuracy)");
+              },
+              (err2) => {
+                setLocationError(msg);
+                toast.error("Location Error", { description: msg });
+              },
+              { enableHighAccuracy: false, timeout: 10000 }
+            );
+          } else {
+            setLocationError(msg);
+            toast.error("Location Error", { description: msg });
+          }
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
     } else {
-      setLocationError("Geolocation is not supported by your browser.");
+      const msg = "Geolocation is not supported by your browser.";
+      setLocationError(msg);
+      toast.error(msg);
     }
   };
 
@@ -2870,6 +2913,7 @@ export default function App() {
     try {
       const newRequestData = {
         proId: requestingQuotePro.id,
+        proUserId: requestingQuotePro.userId || '',
         proName: requestingQuotePro.name,
         userUid: currentUser?.uid || '',
         userName: formData.name,
@@ -2937,6 +2981,9 @@ export default function App() {
       setHandyPadiMessages(prev => [...prev, { role: 'bot' as const, text: response || "I'm sorry, I couldn't process that." }]);
     } catch (error) {
       console.error("HandyPadi Error:", error);
+      const errorMsg = error instanceof Error ? error.message : "HandyPadi is temporarily unavailable.";
+      setHandyPadiMessages(prev => [...prev, { role: 'bot' as const, text: `⚠️ Error: ${errorMsg}. Please ensure AI services are configured.` }]);
+      toast.error("AI Service Error", { description: errorMsg });
     } finally {
       setIsHandyPadiTyping(false);
     }
@@ -3025,11 +3072,13 @@ export default function App() {
       const result = await geminiService.refineJobDescription(desc);
       if (result && result.isRefined) {
         setDesc(result.content);
+        toast.success("Job description refined by AI");
       } else if (result) {
-        alert(result.content);
+        toast.info("AI Insights", { description: result.content });
       }
     } catch (error) {
       console.error("Refine Description Error:", error);
+      toast.error("AI Refinement Failed", { description: "Please check your AI configuration." });
     } finally {
       setIsAiRefining(false);
     }
@@ -3085,7 +3134,7 @@ export default function App() {
         <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-center">
           <Sparkles className="w-24 h-24 mb-8 animate-pulse text-blue-500" />
           <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-6"></div>
-          <h1 className="text-2xl font-bold text-white mb-2">Ṣe Ṣe Wá</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">Ṣẹ Ṣẹ Wá</h1>
           <p className="text-slate-400 font-medium">Initializing secure marketplace...</p>
           <p className="text-slate-600 text-xs mt-4">Connecting to core services</p>
         </div>
@@ -3135,7 +3184,7 @@ export default function App() {
             <div className="w-20 h-20 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-8" />
             <h1 className="text-2xl font-black text-white mb-4 tracking-tighter">Redirecting...</h1>
             <p className="text-slate-400 font-medium leading-relaxed mb-6">
-              We are taking you to the correct version of Ṣe Ṣe Wá for your region.
+              We are taking you to the correct version of Ṣẹ Ṣẹ Wá for your region.
             </p>
             {target && (
               <a 
@@ -3267,7 +3316,7 @@ export default function App() {
                 <Logo className="w-[200px] h-[200px] md:w-[300px] md:h-[300px]" />
               </div>
               
-              <h2 className="text-3xl md:text-4xl font-black tracking-tighter text-slate-900 mb-8">Ṣe Ṣe Wá</h2>
+              <h2 className="text-3xl md:text-4xl font-black tracking-tighter text-slate-900 mb-8">Ṣẹ Ṣẹ Wá</h2>
               
               <div className="grid grid-cols-2 gap-4 w-full">
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
@@ -3292,23 +3341,96 @@ export default function App() {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 w-full">
-        <div className="max-w-6xl mx-auto px-2 sm:px-4 py-1 flex items-center justify-between">
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50 w-full shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-4">
+          
+          {/* Logo Section */}
           <div 
-            className="flex items-center cursor-pointer shrink-0" 
+            className="flex items-center cursor-pointer shrink-0 group" 
             onClick={handleGoHome}
             title="Go to Home"
           >
-            <div className="flex items-center justify-center gap-3">
-              <Logo className="w-10 h-10" />
-              <div className="hidden sm:flex flex-col leading-tight">
-                <span className="font-black text-lg tracking-tighter text-blue-600">Ṣe Ṣe Wá</span>
-                <span className="text-[10px] font-bold text-slate-500 tracking-widest uppercase">HandyPadi</span>
+            <div className="flex items-center gap-2">
+              <Logo className="w-8 h-8 sm:w-10 sm:h-10 transition-transform group-hover:scale-110" />
+              <div className="flex flex-col leading-none">
+                <span className="font-black text-sm sm:text-xl tracking-tighter text-blue-600 uppercase">Ṣe Ṣẹ Wá</span>
+                <span className="hidden sm:inline text-[8px] font-black text-slate-400 tracking-[0.2em] uppercase">Golding Limited</span>
               </div>
-              <VoiceWelcome lang={currentLanguage} />
             </div>
           </div>
-          <div className="flex items-center gap-1 sm:gap-3 overflow-x-auto no-scrollbar py-1 flex-1 min-w-0">
+          
+          {/* Main Navigation (Pill Style) */}
+          <nav className="flex-1 max-w-md bg-slate-100/50 p-1 rounded-full hidden md:flex items-center justify-between border border-slate-200/50">
+            <button 
+              onClick={handleGoHome}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                (!showPricing && !showRequests && !showChatList && !showUserProfileModal && !showEditProfile && !showAdminDashboard) 
+                ? 'bg-white text-blue-600 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Home size={16} />
+              <span>{t('Home', currentLanguage)}</span>
+            </button>
+            <button 
+              onClick={() => {
+                setShowRequests(!showRequests);
+                setShowPricing(false);
+                setShowChatList(false);
+                setShowAdminDashboard(false);
+                setShowEditProfile(false);
+                setShowUserProfileModal(false);
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                showRequests ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Clock size={16} />
+              <span>{t('My Requests', currentLanguage)}</span>
+            </button>
+            <button 
+              onClick={() => {
+                setShowChatList(!showChatList);
+                setShowRequests(false);
+                setShowPricing(false);
+                setShowAdminDashboard(false);
+                setShowEditProfile(false);
+                setShowUserProfileModal(false);
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all relative ${
+                showChatList ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <MessageCircle size={16} />
+              <span>{t('Messages', currentLanguage)}</span>
+              {chats.length > 0 && (
+                <span className="absolute top-1 right-2 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold border-2 border-white">
+                  {chats.length}
+                </span>
+              )}
+            </button>
+            <button 
+              onClick={() => {
+                setShowPricing(!showPricing);
+                setShowAdminDashboard(false);
+                setShowRequests(false);
+                setShowChatList(false);
+                setShowEditProfile(false);
+                setShowUserProfileModal(false);
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all ${
+                showPricing ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <CreditCard size={16} />
+              <span>{t('Pricing', currentLanguage)}</span>
+            </button>
+          </nav>
+
+          {/* Right Section Utilities */}
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            <VoiceWelcome lang={currentLanguage} />
+            
             {isAdmin && (
               <button 
                 onClick={() => {
@@ -3317,76 +3439,29 @@ export default function App() {
                   setShowRequests(false);
                   setShowChatList(false);
                 }}
-                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
-                  showAdminDashboard ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
+                className={`p-2 rounded-full transition-all ${
+                  showAdminDashboard ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
                 }`}
+                title={t('Admin', currentLanguage)}
               >
-                <ShieldCheck size={18} />
-                <span className="hidden lg:inline">{t('Admin', currentLanguage)}</span>
+                <ShieldCheck size={20} />
               </button>
             )}
-            <button 
-              onClick={() => {
-                setShowPricing(!showPricing);
-                setShowRequests(false);
-                setShowAdminDashboard(false);
-                setShowChatList(false);
-              }}
-              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
-                showPricing ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Zap size={18} />
-              <span className="hidden sm:inline">{t('Pricing', currentLanguage)}</span>
-            </button>
-            <button 
-              onClick={() => {
-                setShowRequests(!showRequests);
-                setShowPricing(false);
-                setShowChatList(false);
-                setShowAdminDashboard(false);
-              }}
-              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
-                showRequests ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Clock size={18} />
-              <span className="hidden lg:inline">{t('My Requests', currentLanguage)}</span>
-            </button>
-            <button 
-              onClick={() => {
-                setShowChatList(!showChatList);
-                setShowRequests(false);
-                setShowPricing(false);
-                setShowAdminDashboard(false);
-              }}
-              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
-                showChatList ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <MessageCircle size={18} />
-              <span className="hidden lg:inline">{t('Messages', currentLanguage)}</span>
-              {chats.length > 0 && (
-                <span className="bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
-                  {chats.length}
-                </span>
-              )}
-            </button>
-          </div>
 
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0 ml-1">
-            <div className="relative hidden md:block" ref={languageMenuRef}>
+            <div className="w-px h-6 bg-slate-200 mx-1 hidden sm:block" />
+
+            <div className="relative" ref={languageMenuRef}>
               <button 
                 onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-                className={`p-2 rounded-full transition-colors flex items-center gap-1 ${
-                  showLanguageMenu ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
+                className={`p-1.5 sm:p-2 rounded-full transition-colors flex items-center gap-1 ${
+                  showLanguageMenu ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-100'
                 }`}
               >
-                <Globe size={18} />
-                <span className="text-xs font-bold hidden md:inline">{currentLanguage}</span>
+                <Globe size={18} className="sm:w-5 sm:h-5" />
+                <span className="text-[10px] sm:text-xs font-bold hidden lg:inline">{currentLanguage}</span>
               </button>
               {showLanguageMenu && (
-                <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl py-2 w-40 z-50 max-h-64 overflow-y-auto custom-scrollbar">
+                <div className="absolute top-full right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 w-48 z-50 max-h-80 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-top-2">
                   {languages.map(lang => (
                     <button
                       key={lang}
@@ -3394,84 +3469,87 @@ export default function App() {
                         setCurrentLanguage(lang);
                         setShowLanguageMenu(false);
                       }}
-                      className={`w-full text-left px-4 py-2 text-xs hover:bg-slate-50 transition-colors ${
-                        currentLanguage === lang ? 'text-blue-600 font-bold' : 'text-slate-600'
+                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors flex items-center justify-between ${
+                        currentLanguage === lang ? 'text-blue-600 font-bold bg-blue-50/50' : 'text-slate-600'
                       }`}
                     >
-                      {lang}
+                      <span>{lang}</span>
+                      {currentLanguage === lang && <Check size={14} className="text-blue-600" />}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            {currentUser?.role === 'handyman' && (
+            
+            {currentUser && (
               <button 
-                onClick={() => setShowPricing(true)}
-                className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold border border-blue-100 hover:bg-blue-100 transition-colors shrink-0"
+                onClick={() => setShowNotifications(!showNotifications)}
+                className={`p-1.5 sm:p-2 rounded-full transition-colors relative ${
+                  showNotifications ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-100'
+                }`}
               >
-                <CreditCard size={14} />
-                <span>{currentUser.credits || 0}</span>
+                <Bell size={18} className="sm:w-5 sm:h-5" />
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
+                )}
               </button>
             )}
-            {currentUser && (
-              <>
-                <div className="relative shrink-0">
-                  <button 
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className={`p-2 rounded-full transition-colors relative ${
-                      showNotifications ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <Bell size={18} className="sm:w-[20px] sm:h-[20px]" />
-                    {notifications.filter(n => !n.read).length > 0 && (
-                      <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
-                    )}
-                  </button>
-                </div>
-                <button 
-                  onClick={() => {
-                    if (myProProfile) {
-                      setShowEditProfile(!showEditProfile);
-                      setShowUserProfileModal(false);
-                    } else {
-                      setShowUserProfileModal(!showUserProfileModal);
-                      setShowEditProfile(false);
-                    }
-                    setShowRequests(false);
-                    setShowChatList(false);
-                    setShowAdminDashboard(false);
-                  }}
-                  className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 rounded-full text-sm font-medium transition-colors shrink-0 ${
-                    (showEditProfile || showUserProfileModal) ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <User size={18} />
-                  <span className="hidden lg:inline">{t('Profile', currentLanguage)}</span>
-                </button>
-              </>
-            )}
+
+            <div className="w-px h-6 bg-slate-200 mx-0.5 sm:mx-1 hidden md:block" />
+
             {currentUser ? (
               <button 
                 onClick={handleLogout}
-                className="flex items-center gap-1 sm:gap-2 bg-slate-100 text-slate-600 px-2 sm:px-4 py-2 rounded-full text-sm font-medium hover:bg-slate-200 transition-colors shrink-0"
+                className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-full text-sm font-bold hover:bg-slate-200 transition-colors"
               >
-                <LogOut size={18} />
-                <span className="hidden lg:inline">{t('Logout', currentLanguage)}</span>
+                <LogOut size={16} />
+                <span>{t('Logout', currentLanguage)}</span>
               </button>
             ) : (
               <button 
                 onClick={handleLogin}
-                className="flex items-center gap-1 sm:gap-2 bg-blue-600 text-white px-2 sm:px-4 py-2 rounded-full text-sm font-medium hover:bg-blue-700 transition-colors shrink-0"
+                className="hidden md:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95"
               >
-                <LogIn size={18} />
-                <span className="hidden lg:inline">{t('Login', currentLanguage)}</span>
+                <LogIn size={16} />
+                <span>{t('Login', currentLanguage)}</span>
               </button>
             )}
+
+            <button 
+              onClick={() => {
+                if (currentUser) {
+                  if (myProProfile) {
+                    setShowEditProfile(!showEditProfile);
+                    setShowUserProfileModal(false);
+                  } else {
+                    setShowUserProfileModal(!showUserProfileModal);
+                    setShowEditProfile(false);
+                  }
+                } else {
+                  handleLogin();
+                }
+                setShowRequests(false);
+                setShowPricing(false);
+                setShowChatList(false);
+                setShowAdminDashboard(false);
+              }}
+              className={`p-0.5 rounded-full transition-all border-2 hidden md:block ${
+                (showEditProfile || showUserProfileModal) ? 'border-blue-600 scale-110 shadow-lg shadow-blue-600/20' : 'border-transparent hover:border-slate-300'
+              }`}
+            >
+              <div className="w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
+                {currentUser?.photoURL ? (
+                  <img referrerPolicy="no-referrer" src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <User size={20} className="text-slate-400" />
+                )}
+              </div>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8 pb-24 sm:pb-8">
+      <main className="max-w-6xl mx-auto px-4 py-8 pb-24 md:pb-8">
         {showPricing ? (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="text-center mb-12">
@@ -3925,53 +4003,53 @@ export default function App() {
           <>
             {/* Hero / Search Section */}
         <motion.section 
-          initial={{ opacity: 1 }}
+          initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="mb-12 text-center"
+          transition={{ duration: 1 }}
+          className="mb-16 text-center px-2"
         >
           <motion.h2 
-            className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 mb-4 leading-tight"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="text-4xl sm:text-7xl font-black text-slate-900 leading-[0.85] tracking-tighter mb-8 max-w-3xl mx-auto"
           >
             <motion.span
-              initial={{ opacity: 1, y: 0 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="block"
+              animate={{ y: [0, -2, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              className="block mb-2 text-slate-800"
             >
               {t('Find the right handyman', currentLanguage)}
             </motion.span>
             <motion.span 
-              initial={{ opacity: 1, y: 0 }}
               animate={{ 
-                opacity: 1, 
-                y: [0, -4, 0],
+                color: ["#2563eb", "#7c3aed", "#2563eb"],
               }}
               transition={{ 
-                opacity: { delay: 0.4, duration: 0.8, ease: [0.2, 0.65, 0.3, 0.9] },
-                y: { 
-                  delay: 1.5, 
-                  duration: 5, 
-                  repeat: Infinity, 
-                  ease: "easeInOut" 
-                }
+                duration: 8, 
+                repeat: Infinity, 
+                ease: "linear" 
               }}
-              className="text-blue-600 italic block sm:inline"
+              className="italic block text-2xl sm:text-5xl opacity-90"
             >
               {t(currentMarket.slogan, currentLanguage)}
             </motion.span>
           </motion.h2>
           
+          <div className="max-w-4xl mx-auto space-y-4">
+            {/* Search and Quick Filters Row */}
             <motion.div 
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 0.6 }}
-              className="flex flex-col lg:flex-row items-center justify-center gap-4 mb-4"
+              transition={{ delay: 0.4, duration: 0.8 }}
+              className="bg-white p-1 rounded-full shadow-2xl shadow-blue-900/10 border border-slate-100 flex flex-col sm:flex-row items-stretch gap-1 sm:gap-2"
             >
-              <div className="relative w-full max-w-xl">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+              <div className="flex-1 relative">
+                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                 <input 
                   type="text"
                   placeholder={t('Search by name or Location', currentLanguage)}
-                  className="w-full pl-12 pr-10 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-500"
+                  className="w-full pl-14 pr-12 py-5 bg-transparent rounded-full focus:outline-none text-slate-900 font-bold placeholder:text-slate-300 text-sm sm:text-lg"
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -3981,57 +4059,103 @@ export default function App() {
                 {searchQuery && (
                   <button 
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-slate-200 hover:text-slate-400"
                   >
-                    <X size={16} />
+                    <X size={18} />
                   </button>
                 )}
               </div>
-              <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+
+              <div className="flex gap-1 sm:gap-2 p-1">
                 <button 
                   onClick={handleGetLocation}
-                  className={`flex-1 lg:w-48 h-[60px] flex items-center justify-center gap-2 px-6 rounded-2xl font-bold transition-all whitespace-nowrap shadow-sm border ${
+                  className={`flex-1 sm:flex-none px-6 py-4 rounded-full font-black transition-all flex items-center justify-center gap-2 text-[10px] sm:text-xs uppercase tracking-widest border ${
                     userLocation 
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-blue-600/20' 
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xl shadow-blue-600/30' 
+                    : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100'
                   }`}
                 >
-                  <Navigation size={20} className={userLocation ? 'animate-pulse' : ''} />
-                  <span>{userLocation ? t('Location Active', currentLanguage) : t('Find Nearby', currentLanguage)}</span>
+                  <Navigation size={14} className={userLocation ? 'animate-pulse' : ''} />
+                  <span>{userLocation ? t('Active', currentLanguage) : t('Nearby', currentLanguage)}</span>
                 </button>
                 <button 
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`flex-1 lg:w-48 h-[60px] flex items-center justify-center gap-2 px-6 rounded-2xl font-bold transition-all whitespace-nowrap shadow-sm border ${
+                  className={`flex-1 sm:flex-none px-6 py-4 rounded-full font-black transition-all flex items-center justify-center gap-2 text-[10px] sm:text-xs uppercase tracking-widest border ${
                     showFilters || minRating > 0 || minExperience > 0 
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-blue-600/20' 
-                    : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xl shadow-blue-600/30' 
+                    : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100'
                   }`}
                 >
-                  <Filter size={20} />
-                  <span>{t('Filters', currentLanguage)} {(minRating > 0 || minExperience > 0) && `(${(minRating > 0 ? 1 : 0) + (minExperience > 0 ? 1 : 0)})`}</span>
+                  <Filter size={14} />
+                  <span>{t('Filters', currentLanguage)}</span>
                 </button>
-                
-                <div className="relative flex-1 lg:w-48 h-[60px]">
+              </div>
+            </motion.div>
+
+            {/* Quick Categories Bar */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6, duration: 0.6 }}
+              className="flex items-center gap-2 overflow-x-auto py-4 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0"
+            >
+              {CATEGORIES.map((cat, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedCategory(selectedCategory === cat.name ? 'All' : cat.name)}
+                  className={`px-6 py-3 rounded-2xl whitespace-nowrap text-[11px] font-black transition-all flex items-center gap-2 border uppercase tracking-wider ${
+                    selectedCategory === cat.name 
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-xl shadow-slate-900/20' 
+                    : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300 hover:text-slate-600'
+                  }`}
+                >
+                  <cat.icon size={12} />
+                  <span>{t(cat.name, currentLanguage)}</span>
+                </button>
+              ))}
+            </motion.div>
+
+            {/* AI Diagnosis CTA */}
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8, duration: 0.6 }}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-[2rem] p-6 text-white flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden relative group"
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:scale-150 transition-transform duration-700" />
+              <div className="relative z-10 text-center md:text-left">
+                <h4 className="text-xl font-black tracking-tight mb-1">Not sure what's broken?</h4>
+                <p className="text-purple-100 text-sm">Upload a photo and our AI will tell you who to call.</p>
+              </div>
+              <div className="relative z-10 shrink-0">
+                <div className="relative inline-block">
                   <input
                     type="file"
                     accept="image/*"
                     onChange={handleDiagnoseImage}
                     className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                    title={t('AI Diagnostics', currentLanguage)}
                   />
-                  <button 
-                    className={`w-full h-full flex items-center justify-center gap-2 px-6 rounded-2xl font-bold transition-all whitespace-nowrap shadow-sm border ${
-                      isAiDiagnosing 
-                      ? 'bg-purple-600 text-white border-purple-600 animate-pulse' 
-                      : 'bg-white border-slate-200 text-purple-600 hover:border-purple-400 hover:bg-purple-50'
-                    }`}
-                  >
-                    <Sparkles size={20} />
-                    <span>{t('AI Diagnostics', currentLanguage)}</span>
+                  <button className={`px-8 py-4 rounded-2xl font-black text-sm transition-all flex items-center gap-2 shadow-xl ${
+                    isAiDiagnosing 
+                    ? 'bg-white/20 text-white animate-pulse' 
+                    : 'bg-white text-purple-600 hover:bg-purple-50 hover:scale-105 active:scale-95'
+                  }`}>
+                    {isAiDiagnosing ? (
+                      <>
+                        <RotateCcw className="animate-spin" size={18} />
+                        <span>Analyzing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera size={18} />
+                        <span>Try AI Diagnostics</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
             </motion.div>
+          </div>
 
             {isAiMatching && (
               <div className="flex items-center justify-center gap-2 text-blue-600 text-sm font-bold mb-4 animate-pulse">
@@ -4151,36 +4275,74 @@ export default function App() {
           }} 
         />
 
-        {/* Categories */}
-        <motion.section 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8, duration: 0.6 }}
-          className="mb-12"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-slate-700">{t('Categories', currentLanguage)}</h3>
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-4 no-scrollbar">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.name}
-                onClick={() => setSelectedCategory(selectedCategory === cat.name ? 'All' : cat.name)}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl whitespace-nowrap transition-all ${
-                  selectedCategory === cat.name 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
-                  : 'bg-white text-slate-600 border border-slate-200 hover:border-blue-200'
-                }`}
-              >
-                <cat.icon size={18} />
-                <span className="text-sm font-medium">{t(cat.name, currentLanguage)}</span>
-              </button>
-            ))}
-          </div>
-        </motion.section>
-
         {/* Handyman List */}
-        <section id="handyman-list">
+        <section id="handyman-list" className="mt-12">
+          {!userLocation && !locationError && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8 p-6 bg-blue-50 border border-blue-100 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-4"
+            >
+              <div className="flex items-center gap-4 text-left">
+                <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 shrink-0">
+                  <MapPin size={24} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-blue-900 leading-tight">Find Pros Near You</h4>
+                  <p className="text-sm text-blue-600/70">Enable location access to see the closest professionals in your area.</p>
+                </div>
+              </div>
+              <button 
+                onClick={handleGetLocation}
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 whitespace-nowrap"
+              >
+                Allow Location Access
+              </button>
+            </motion.div>
+          )}
+
+          {locationError && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8 p-6 bg-amber-50 border border-amber-100 rounded-[2rem] flex flex-col gap-4"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600 shrink-0">
+                  <AlertTriangle size={24} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-amber-900 leading-tight">Location Access Restricted</h4>
+                  <p className="text-sm text-amber-600/70">{locationError}. You can still find pros by searching for a specific city below.</p>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 max-w-md">
+                <input 
+                  type="text"
+                  placeholder="Enter your city (e.g. Lagos, Abuja)..."
+                  className="flex-1 px-4 py-2 bg-white rounded-xl border border-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setSearchQuery((e.target as HTMLInputElement).value);
+                      toast.success(`Searching for pros in ${(e.target as HTMLInputElement).value}`);
+                    }
+                  }}
+                />
+                <button 
+                  className="px-4 py-2 bg-amber-600 text-white rounded-xl font-bold"
+                  onClick={(e) => {
+                    const input = (e.currentTarget.previousElementSibling as HTMLInputElement);
+                    setSearchQuery(input.value);
+                    toast.success(`Searching for pros in ${input.value}`);
+                  }}
+                >
+                  Search
+                </button>
+              </div>
+            </motion.div>
+          )}
+
           <div className="flex items-center justify-between mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <h3 className="font-semibold text-slate-700">
@@ -4205,6 +4367,16 @@ export default function App() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {!userLocation && (
+                <button 
+                  onClick={handleGetLocation}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100"
+                  title="Enable location to find pros near you"
+                >
+                  <MapPin size={12} />
+                  Enable Location
+                </button>
+              )}
               {userLocation && (
                 <button 
                   onClick={() => setUseRadiusFilter(!useRadiusFilter)}
@@ -4345,19 +4517,19 @@ export default function App() {
                       </div>
                     </div>
                     
-                    <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-50">
+                    <div className="flex items-center justify-between gap-2 pt-4 border-t border-slate-50">
                       {handy.verified && currentUser?.plan !== 'member' && currentUser?.role !== 'handyman' ? (
                         <div className="px-4 py-2 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase rounded-lg border border-blue-100 whitespace-nowrap">
                           Members Only
                         </div>
                       ) : (
-                        <>
+                        <div className="flex items-center gap-2 w-full">
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
                               startChat(handy.id, handy.name);
                             }}
-                            className="p-3 bg-white border border-blue-600 text-blue-600 rounded-2xl hover:bg-blue-50 transition-all shadow-sm shrink-0 flex items-center justify-center"
+                            className="p-3 bg-white border border-blue-600 text-blue-600 rounded-2xl hover:bg-blue-50 transition-all shadow-sm flex items-center justify-center"
                             title="Chat Now"
                           >
                             <MessageCircle size={18} />
@@ -4367,12 +4539,12 @@ export default function App() {
                               e.stopPropagation();
                               setRequestingQuotePro(handy);
                             }}
-                            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 whitespace-nowrap shrink-0"
+                            className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 text-sm"
                           >
-                            <Zap size={18} />
+                            <Zap size={16} />
                             <span>Request Now</span>
                           </button>
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -4661,14 +4833,14 @@ export default function App() {
                     <div className="flex flex-col sm:flex-row gap-3 pt-4 shrink-0">
                       <button 
                         onClick={() => startChat(selectedPro.id, selectedPro.name)}
-                        className="flex-1 flex items-center justify-center gap-2 bg-white border border-blue-600 text-blue-600 py-4 px-6 rounded-2xl font-bold hover:bg-blue-50 transition-all active:scale-95 whitespace-nowrap shrink-0"
+                        className="flex-1 flex items-center justify-center gap-2 bg-white border border-blue-600 text-blue-600 py-4 px-6 rounded-2xl font-bold hover:bg-blue-50 transition-all active:scale-95 text-sm"
                       >
                         <MessageCircle size={20} />
                         Chat Now
                       </button>
                       <button 
                         onClick={() => setRequestingQuotePro(selectedPro)}
-                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-4 px-6 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 active:scale-95 whitespace-nowrap shrink-0"
+                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-4 px-6 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 active:scale-95 text-sm"
                       >
                         <Zap size={20} />
                         Request Now
@@ -4882,7 +5054,7 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-8 max-h-[90vh] overflow-y-auto"
             >
-              <h2 className="text-2xl font-bold mb-6">Join Ṣe Ṣe Wá</h2>
+              <h2 className="text-2xl font-bold mb-6">Join Ṣẹ Ṣẹ Wá</h2>
               <form className="space-y-4" onSubmit={(e) => {
                 e.preventDefault();
                 const fd = new FormData(e.currentTarget);
@@ -5323,12 +5495,11 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-8 max-h-[90vh] overflow-y-auto"
+              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto"
             >
-              <h2 className="text-2xl font-bold mb-2">Request a Quote</h2>
+              <h2 className="text-xl sm:text-2xl font-bold mb-2">Request a Quote</h2>
               <p className="text-slate-500 mb-6 text-sm">
                 Fill this out to contact <span className="font-bold text-slate-900">{requestingQuotePro.name}</span>. 
-                Your request will be monitored for quality assurance.
               </p>
               
               <form className="space-y-4" onSubmit={(e) => {
@@ -5340,29 +5511,29 @@ export default function App() {
                 });
               }}>
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-400 uppercase ml-1">Your Name</label>
-                  <input name="name" placeholder="Enter your name" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Your Name</label>
+                  <input name="name" placeholder="Enter your name" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between ml-1">
-                    <label className="text-xs font-bold text-slate-400 uppercase">Job Description</label>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between ml-1 gap-2 sm:gap-0">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Job Description</label>
                     <div className="flex items-center gap-2">
                       <button 
                         type="button"
                         onClick={() => handleTranslate(jobDescriptionInput, 'job-refine')}
                         disabled={isTranslating === 'job-refine' || !jobDescriptionInput}
-                        className="text-[10px] font-bold text-slate-500 flex items-center gap-1 hover:underline disabled:opacity-50"
+                        className="text-[9px] font-bold text-slate-500 flex items-center gap-1 hover:underline disabled:opacity-50"
                       >
-                        <Globe size={12} />
+                        <Globe size={10} />
                         {isTranslating === 'job-refine' ? t('Translating...', currentLanguage) : `${t('Translate to', currentLanguage)} ${currentLanguage}`}
                       </button>
                       <button 
                         type="button"
                         onClick={() => handleRefineDescription(jobDescriptionInput, setJobDescriptionInput)}
                         disabled={isAiRefining || !jobDescriptionInput}
-                        className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline disabled:opacity-50"
+                        className="text-[9px] font-bold text-blue-600 flex items-center gap-1 hover:underline disabled:opacity-50"
                       >
-                        <Sparkles size={12} />
+                        <Sparkles size={10} />
                         {isAiRefining ? 'Refining...' : 'Refine with AI'}
                       </button>
                     </div>
@@ -5373,14 +5544,14 @@ export default function App() {
                     required 
                     value={jobDescriptionInput}
                     onChange={(e) => setJobDescriptionInput(e.target.value)}
-                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 h-32" 
+                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 h-24 sm:h-32 text-sm" 
                   />
                 </div>
                 
-                <div className="flex gap-4 pt-4">
-                  <button type="button" onClick={() => setRequestingQuotePro(null)} className="flex-1 py-4 rounded-2xl font-bold text-slate-500 hover:bg-slate-100 transition-all active:scale-95">Cancel</button>
-                  <button type="submit" className="flex-1 py-4 rounded-2xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2">
-                    <Zap size={18} />
+                <div className="flex flex-col sm:flex-row gap-2 pt-4">
+                  <button type="button" onClick={() => setRequestingQuotePro(null)} className="flex-1 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-slate-500 hover:bg-slate-100 transition-all text-sm">Cancel</button>
+                  <button type="submit" className="flex-1 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 text-sm">
+                    <Zap size={16} />
                     Send Request
                   </button>
                 </div>
@@ -5668,9 +5839,19 @@ export default function App() {
                     </div>
                   )}
 
-                  <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all">
-                    Save Profile Changes
-                  </button>
+                  <div className="flex gap-4 pt-4">
+                    <button type="submit" className="flex-[2] bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all">
+                      Save Profile Changes
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={handleLogout}
+                      className="flex-1 bg-red-50 text-red-600 py-4 rounded-2xl font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2 border border-red-100"
+                    >
+                      <LogOut size={18} />
+                      <span className="sm:inline hidden">Logout</span>
+                    </button>
+                  </div>
                 </form>
               </div>
             </motion.div>
@@ -5765,15 +5946,23 @@ export default function App() {
                     <input name="portfolio" defaultValue={myProProfile.portfolio[0] || ''} className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20" />
                   </div>
                   
-                  <div className="flex gap-4 pt-4">
+                  <div className="flex flex-col sm:flex-row gap-3 pt-4">
                     <button type="button" disabled={isUpdating} onClick={() => setShowEditProfile(false)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
-                    <button type="submit" disabled={isUpdating} className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-50 flex items-center justify-center gap-2">
+                    <button type="submit" disabled={isUpdating} className="flex-[2] py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-50 flex items-center justify-center gap-2">
                       {isUpdating ? (
                         <>
                           <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                           Updating...
                         </>
                       ) : 'Save Changes'}
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={handleLogout}
+                      className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2 border border-red-100"
+                    >
+                      <LogOut size={18} />
+                      <span className="sm:inline hidden">Logout</span>
                     </button>
                   </div>
                 </form>
@@ -5783,16 +5972,18 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Bottom Navigation for Mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-2 flex items-center justify-between z-50 md:hidden">
+      {/* Modern Fixed Bottom Navigation for Mobile */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/80 backdrop-blur-2xl border-t border-slate-100 px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.08)]">
         <button 
           onClick={handleGoHome}
-          className={`flex flex-col items-center gap-1 ${
-            (!showPricing && !showRequests && !showChatList && !showUserProfileModal && !showEditProfile && !showAdminDashboard) ? 'text-blue-600' : 'text-slate-400'
+          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${
+            (!showPricing && !showRequests && !showChatList && !showUserProfileModal && !showEditProfile && !showAdminDashboard) 
+            ? 'text-blue-600 bg-blue-50/50' 
+            : 'text-slate-400 active:bg-slate-50'
           }`}
         >
-          <Home size={18} />
-          <span className="text-[9px] font-bold">Home</span>
+          <Home size={20} weight={(!showPricing && !showRequests && !showChatList && !showUserProfileModal && !showEditProfile && !showAdminDashboard) ? "fill" : "regular"} />
+          <span className="text-[9px] font-black uppercase tracking-tight">{t('Home', currentLanguage)}</span>
         </button>
         <button 
           onClick={() => {
@@ -5803,10 +5994,10 @@ export default function App() {
             setShowEditProfile(false);
             setShowUserProfileModal(false);
           }}
-          className={`flex flex-col items-center gap-1 ${showRequests ? 'text-blue-600' : 'text-slate-400'}`}
+          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${showRequests ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 active:bg-slate-50'}`}
         >
-          <Clock size={18} />
-          <span className="text-[9px] font-bold">Requests</span>
+          <Clock size={20} />
+          <span className="text-[9px] font-black uppercase tracking-tight">{t('My Requests', currentLanguage)}</span>
         </button>
         <button 
           onClick={() => {
@@ -5817,57 +6008,39 @@ export default function App() {
             setShowEditProfile(false);
             setShowUserProfileModal(false);
           }}
-          className={`flex flex-col items-center gap-1 relative ${showChatList ? 'text-blue-600' : 'text-slate-400'}`}
+          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all relative ${showChatList ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 active:bg-slate-50'}`}
         >
-          <MessageCircle size={18} />
-          <span className="text-[9px] font-bold">Messages</span>
+          <MessageCircle size={20} />
+          <span className="text-[9px] font-black uppercase tracking-tight">{t('Messages', currentLanguage)}</span>
           {chats.length > 0 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">
+            <span className="absolute top-1 right-2 bg-red-500 text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-black border-2 border-white">
               {chats.length}
             </span>
           )}
         </button>
-        <div 
-          onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-          className={`flex flex-col items-center gap-1 relative cursor-pointer ${showLanguageMenu ? 'text-blue-600' : 'text-slate-400'}`}
-          ref={mobileLanguageMenuRef}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              setShowLanguageMenu(!showLanguageMenu);
-            }
+        <button 
+          onClick={() => {
+            setShowPricing(true);
+            setShowRequests(false);
+            setShowChatList(false);
+            setShowAdminDashboard(false);
+            setShowEditProfile(false);
+            setShowUserProfileModal(false);
           }}
+          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${showPricing ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 active:bg-slate-50'}`}
         >
-          <Globe size={18} />
-          <span className="text-[9px] font-bold">Language</span>
-          {showLanguageMenu && (
-            <div className="absolute bottom-full right-0 mb-2 bg-white border border-slate-200 rounded-xl shadow-2xl py-2 w-40 z-[60] max-h-64 overflow-y-auto custom-scrollbar">
-              {languages.map(lang => (
-                <button
-                  key={lang}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCurrentLanguage(lang);
-                    setShowLanguageMenu(false);
-                  }}
-                  className={`w-full text-left px-4 py-2 text-xs hover:bg-slate-50 transition-colors ${
-                    currentLanguage === lang ? 'text-blue-600 font-bold' : 'text-slate-600'
-                  }`}
-                >
-                  {lang}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+          <CreditCard size={20} />
+          <span className="text-[9px] font-black uppercase tracking-tight">{t('Pricing', currentLanguage)}</span>
+        </button>
         <button 
           onClick={() => {
             if (currentUser) {
               if (myProProfile) {
-                setShowEditProfile(true);
+                setShowEditProfile(!showEditProfile);
+                setShowUserProfileModal(false);
               } else {
-                setShowUserProfileModal(true);
+                setShowUserProfileModal(!showUserProfileModal);
+                setShowEditProfile(false);
               }
             } else {
               handleLogin();
@@ -5877,24 +6050,30 @@ export default function App() {
             setShowChatList(false);
             setShowAdminDashboard(false);
           }}
-          className={`flex flex-col items-center gap-1 ${(showEditProfile || showUserProfileModal) ? 'text-blue-600' : 'text-slate-400'}`}
+          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${(showEditProfile || showUserProfileModal) ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 active:bg-slate-50'}`}
         >
-          <User size={18} />
-          <span className="text-[9px] font-bold">Profile</span>
+          <div className={`w-5 h-5 rounded-full overflow-hidden border ${ (showEditProfile || showUserProfileModal) ? 'border-blue-600' : 'border-slate-300'}`}>
+            {currentUser?.photoURL ? (
+              <img referrerPolicy="no-referrer" src={currentUser.photoURL} alt="P" className="w-full h-full object-cover" />
+            ) : (
+              <User size={14} className="m-auto" />
+            )}
+          </div>
+          <span className="text-[9px] font-black uppercase tracking-tight text-center">{t('Profile', currentLanguage)}</span>
         </button>
-        {currentUser && (
-          <button 
-            onClick={handleLogout}
-            className="flex flex-col items-center gap-1 text-slate-400"
-          >
-            <LogOut size={18} />
-            <span className="text-[9px] font-bold">Logout</span>
-          </button>
-        )}
+        <button 
+          onClick={currentUser ? handleLogout : handleLogin}
+          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all text-slate-400 active:bg-slate-50`}
+        >
+          {currentUser ? <LogOut size={20} /> : <LogIn size={20} />}
+          <span className="text-[9px] font-black uppercase tracking-tight text-center">
+            {currentUser ? t('Logout', currentLanguage) : t('Login', currentLanguage)}
+          </span>
+        </button>
       </nav>
 
       {/* Footer */}
-      <footer className="max-w-6xl mx-auto px-4 py-12 border-t border-slate-200 mt-12 flex flex-col items-center gap-6">
+      <footer className="max-w-6xl mx-auto px-4 py-12 border-t border-slate-200 mt-12 mb-28 md:mb-12 flex flex-col items-center gap-6">
         <Logo size={64} className="opacity-40 grayscale hover:grayscale-0 transition-all cursor-pointer" />
         
         <div className="flex items-center gap-6 text-xs font-bold text-slate-400 uppercase tracking-widest">
@@ -5904,7 +6083,7 @@ export default function App() {
         </div>
 
         <p className="text-slate-400 text-sm">
-          &copy; 2026 Ṣe Ṣe Wá Group Limited. {currentMarket.name}'s leading platform for repairs.
+          &copy; 2026 Ṣe Ṣẹ Wá Golding Limited. {currentMarket.name}'s leading platform for repairs.
         </p>
       </footer>
 
@@ -5942,7 +6121,7 @@ export default function App() {
                     1. The Escrow Payment System
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    Ṣe Ṣe Wá Group Limited utilizes a secure Escrow system powered by Paystack. When you book a professional, your payment is held securely by our platform. 
+                    Ṣẹ Ṣẹ Wá Golding Limited utilizes a secure Escrow system powered by Paystack. When you book a professional, your payment is held securely by our platform. 
                     <strong> Funds are only released to the professional once you confirm the job is completed</strong> to your satisfaction. 
                     This ensures that your money is safe and professionals are motivated to deliver high-quality work.
                   </p>
@@ -5969,7 +6148,7 @@ export default function App() {
                     3. Professional Conduct
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    All professionals on Ṣe Ṣe Wá Group Limited agree to provide services with integrity. Misrepresentation of skills, harassment, or bypassing the platform's payment system to avoid fees will result in immediate and permanent account suspension.
+                    All professionals on Ṣẹ Ṣẹ Wá Golding Limited agree to provide services with integrity. Misrepresentation of skills, harassment, or bypassing the platform's payment system to avoid fees will result in immediate and permanent account suspension.
                   </p>
                 </section>
 
@@ -6124,7 +6303,7 @@ export default function App() {
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              className="absolute bottom-16 right-0 w-80 h-96 bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
+              className="absolute bottom-16 right-0 w-[calc(100vw-3rem)] sm:w-80 h-[500px] max-h-[60vh] bg-white border border-slate-200 rounded-[2rem] shadow-2xl flex flex-col overflow-hidden"
             >
               <div className="p-4 bg-white border-b border-slate-100 text-slate-900 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -6176,21 +6355,21 @@ export default function App() {
                 )}
               </div>
 
-              <form onSubmit={handleHandyPadiSend} className="p-4 border-t border-slate-100">
-                <div className="flex gap-2">
+              <form onSubmit={handleHandyPadiSend} className="p-3 border-t border-slate-100 bg-slate-50/50">
+                <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={handyPadiInput}
                     onChange={(e) => setHandyPadiInput(e.target.value)}
-                    placeholder="Ask anything..."
-                    className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                    placeholder="Ask HandyPadi..."
+                    className="flex-1 min-w-0 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
                   />
                   <button 
                     type="submit" 
-                    className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2"
+                    disabled={!handyPadiInput.trim() || isHandyPadiTyping}
+                    className="bg-blue-600 text-white p-2.5 rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center shrink-0 disabled:opacity-50 disabled:hover:bg-blue-600"
                   >
-                    <span className="hidden sm:inline font-bold text-xs">Send</span>
-                    <Send size={18} />
+                    <Send size={18} fill="currentColor" />
                   </button>
                 </div>
               </form>

@@ -2,22 +2,25 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 // Standard initialization - using a safe accessor for Vite
 const getApiKey = () => {
-  try {
-    // @ts-ignore - process.env might be defined by Vite 'define'
-    return process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || "";
-  } catch (e) {
-    return import.meta.env.VITE_GEMINI_API_KEY || "";
-  }
+  // In the AI Studio environment, process.env.GEMINI_API_KEY is the standard way to access the key.
+  // Vite's 'define' in vite.config.ts should make this available.
+  return process.env.GEMINI_API_KEY || "";
 };
 
 let aiInstance: GoogleGenAI | null = null;
 const getAI = () => {
   if (!aiInstance) {
     const key = getApiKey();
-    if (!key) {
-      console.warn("GEMINI_API_KEY is not configured. AI features will be disabled.");
+    if (!key || key.trim().length < 5) {
+      console.warn("GEMINI_API_KEY is not configured or invalid. AI features will be disabled.");
+      return null;
     }
-    aiInstance = new GoogleGenAI({ apiKey: key });
+    try {
+      aiInstance = new GoogleGenAI({ apiKey: key.trim() });
+    } catch (e) {
+      console.error("AI Service: Failed to initialize GoogleGenAI", e);
+      return null;
+    }
   }
   return aiInstance;
 };
@@ -31,6 +34,8 @@ export interface PriceEstimation {
   partsNeeded: string[];
   marketNotes: string;
 }
+
+const PREVIEW_TEXT_MODEL = "gemini-3-flash-preview";
 
 export async function getPriceEstimation(
   task: string,
@@ -53,8 +58,12 @@ export async function getPriceEstimation(
 `;
 
   const ai = getAI();
+  if (!ai) {
+    throw new Error("AI service is not initialized. Please check your GEMINI_API_KEY.");
+  }
+
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: PREVIEW_TEXT_MODEL,
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -82,5 +91,20 @@ export async function getPriceEstimation(
     }
   });
 
-  return JSON.parse(response.text);
+  const text = response.text;
+  if (!text) {
+    throw new Error("AI returned an empty response.");
+  }
+  
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("AI Service: Failed to parse JSON response", text);
+    // Fallback: try to find JSON in the text if it's not pure JSON
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    throw new Error("AI returned invalid JSON format.");
+  }
 }
