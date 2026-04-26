@@ -1,0 +1,30 @@
+kind: "AppHostingConfiguration"
+schemaVersion: "v1"
+
+build:
+  service_account: "firebase-app-hosting-compute@ai-studio-applet-webapp-5d01f.iam.gserviceaccount.com"
+  logging: CLOUD_LOGGING_ONLY
+
+env:
+  - name: VITE_FIRESTORE_DATABASE_ID
+    value: "(default)"
+  - name: PAYSTACK_SECRET_KEY
+    value: "sk_test_f8171368401528df5a2b57c6dedff4d6c5d43b94"
+  - name: VITE_PAYSTACK_PUBLIC_KEY
+    value: "pk_test_74f86d09ab01781dcb1077b59f2a38ff14e9f051"
+  - name: GEMINI_API_KEY
+    value: "AIzaSyBGzzNodD5wwN5mj6JX6TtQE56cnBK3aOc"
+  - name: VITE_FIREBASE_API_KEY
+    value: "AIzaSyBD68pIwkGk2GzC8gfcUsXOI11fSDo9z_8"
+  - name: VITE_FIREBASE_AUTH_DOMAIN
+    value: "ai-studio-applet-webapp-5d01f.firebaseapp.com"
+  - name: VITE_FIREBASE_PROJECT_ID
+    value: "ai-studio-applet-webapp-5d01f"
+  - name: VITE_FIREBASE_STORAGE_BUCKET
+    value: "ai-studio-applet-webapp-5d01f.firebasestorage.app"
+  - name: VITE_FIREBASE_MESSAGING_SENDER_ID
+    value: "889381515641"
+  - name: VITE_FIREBASE_APP_ID
+    value: "1:889381515641:web:07b14cf686ece46ceabfa8"
+  - name: FIREBASE_CONFIG
+    value: '{"databaseURL":"","projectId":"ai-studio-applet-webapp-5d01f","storageBucket":"ai-studio-applet-webapp-5d01f.firebasestorage.app"}'
