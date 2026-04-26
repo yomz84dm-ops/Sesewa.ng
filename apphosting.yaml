@@ -29,3 +29,4 @@ env:
     value: "1:889381515641:web:07b14cf686ece46ceabfa8"
   - name: FIREBASE_CONFIG
     value: '{"databaseURL":"","projectId":"ai-studio-applet-webapp-5d01f","storageBucket":"ai-studio-applet-webapp-5d01f.firebasestorage.app"}'
+
