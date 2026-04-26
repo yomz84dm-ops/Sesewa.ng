@@ -287,6 +287,34 @@ export const UI_TRANSLATIONS: Record<string, Record<Language, string>> = {
     'Igala': 'Luo hegen',
     'Idoma': 'Luo hegen'
   },
+  'Connection issue detected. Please check your internet or data connection and try again.': {
+    'English': 'Connection issue detected. Please check your internet or data connection and try again.',
+    'Pidgin': 'Network bad o. Check your data and try again.',
+    'Yoruba': 'Ìṣòro ìsorapọ̀ wà. Jọ̀wọ́ ṣàyẹ̀wò ínńtánẹ́ẹ̀tì rẹ kí o sì tún dánwò.',
+    'Hausa': 'An sami matsala wajen haɗin yanar gizo. Da fatan za a bincika bayanan ku kuma a sake gwadawa.',
+    'Igbo': 'Enwere nsogbu na netwọk gị. Biko lelee data gị ma gbalịa ọzọ.'
+  },
+  'There was a problem signing you in due to a temporary connection drop. Please wait a moment and try again.': {
+    'English': 'There was a problem signing you in due to a temporary connection drop. Please wait a moment and try again.',
+    'Pidgin': 'Problem dey to enter because network cut. Wait small and try again.',
+    'Yoruba': 'Ìṣòro wà láti wọlé nítorí pé ínńtánẹ́ẹ̀tì gé. Jọ̀wọ́ dúró díẹ̀ kí o sì tún dánwò.',
+    'Hausa': 'Akwai matsala wajen shiga saboda haɗin yanar gizo ya yanke. Da fatan za a jira kaɗan kuma a sake gwadawa.',
+    'Igbo': 'Enwere nsogbu na mbanye gị nitori na netwọk kwụsịrị. Biko chere obere oge ma gbalịa ọzọ.'
+  },
+  'The login request timed out. This usually happens on slow data connections. Please try moving to a better signal area.': {
+    'English': 'The login request timed out. This usually happens on slow data connections. Please try moving to a better signal area.',
+    'Pidgin': 'Network slow too much. Find better signal and try again.',
+    'Yoruba': 'Ìfilọ́lẹ̀ wọlé ti pẹ́ jù. Èyí máa ń ṣẹlẹ̀ nígbà tí ínńtánẹ́ẹ̀tì bá lọ́ra. Jọ̀wọ́ wá ibi tí ifúnpá ínńtánẹ́ẹ̀tì bá dára sí i.',
+    'Hausa': 'Buƙatar shiga ta wuce lokaci. Wannan yakan faru ne akan haɗin yanar gizo mai hankali. Da fatan za a sake gwadawa a inda akwai kyakkyawan sigina.',
+    'Igbo': 'Arịrịọ mbanye agwụla oge. Nke a na-emekarị na netwọk nwayọọ. Biko gbalịa gaa n\'ebe nwere netwọk ka mma.'
+  },
+  'Low data or connection issue. Some features may be limited.': {
+    'English': 'Low data or connection issue. Some features may be limited.',
+    'Pidgin': 'Your data low or network bad. Some things no go work well.',
+    'Yoruba': 'Ìṣòro ínńtánẹ́ẹ̀tì tàbí dátà rẹ ti kéré. Àwọn nǹkan kan lè má ṣiṣẹ́ dáadáa.',
+    'Hausa': 'Matsalar bayanan yanar gizo ne. Wasu sassan ƙila ba za su yi aiki yadda ya kamata ba.',
+    'Igbo': 'Nsogbu nwere na netwọk gị. Ihe ụfọdụ nwere ike agaghị arụ ọrụ nke ọma.'
+  },
   'Contact': {
     'English': 'Contact',
     'Pidgin': 'Call am',
@@ -305,6 +333,27 @@ export const UI_TRANSLATIONS: Record<string, Record<Language, string>> = {
     'Nupe': 'Tiẹ ẹ',
     'Igala': 'Tiẹ ẹ',
     'Idoma': 'Tiẹ ẹ'
+  },
+  'Login Problem': {
+    'English': 'Login Problem',
+    'Pidgin': 'Login Issue',
+    'Yoruba': 'Ìṣòro Ìwọlé',
+    'Hausa': 'Matsalar Shiga',
+    'Igbo': 'Nsogbu Mbanye'
+  },
+  'Authentication Problem': {
+    'English': 'Authentication Problem',
+    'Pidgin': 'Auth Problem',
+    'Yoruba': 'Ìṣòro Ìfìdíhàn',
+    'Hausa': 'Matsalar Tabbatarwa',
+    'Igbo': 'Nsogbu Nkwenye'
+  },
+  'Authentication Error': {
+    'English': 'Authentication Error',
+    'Pidgin': 'Auth Problem',
+    'Yoruba': 'Ìṣìṣe Ìfìdíhàn',
+    'Hausa': 'Kuskuren Tabbatarwa',
+    'Igbo': 'Njehie Nkwenye'
   },
   'Grow Your Business': {
     'English': 'Grow Your Business',

@@ -224,8 +224,15 @@ export const geminiService = {
       const result = response.text?.trim() || text;
       translationCache[cacheKey] = result;
       return result;
-    } catch (error) {
-      console.error("Translation Error:", error);
+    } catch (error: any) {
+      const errorMsg = error?.message || "";
+      const isLeaked = errorMsg.includes("leaked") || errorMsg.includes("API key") || error?.status === "PERMISSION_DENIED";
+      
+      if (isLeaked) {
+        console.error("Ṣe Ṣe Wá Translation: Gemini API key invalid/leaked.");
+      } else {
+        console.error("Translation Error:", error);
+      }
       return text;
     }
   },
@@ -274,8 +281,18 @@ export const geminiService = {
         console.warn("TTS model returned no audio data part");
       }
       return audioData;
-    } catch (error) {
-      console.error("Voice Welcome Error:", error);
+    } catch (error: any) {
+      // Check for specifically leaked API key error or permission denied
+      const errorMsg = error?.message || "";
+      const isLeaked = errorMsg.includes("leaked") || errorMsg.includes("API key");
+      const isPermissionDenied = error?.status === "PERMISSION_DENIED" || error?.code === 403;
+
+      if (isLeaked || isPermissionDenied) {
+        console.error("Ṣe Ṣe Wá AI: GEMINI_API_KEY is restricted, leaked, or invalid. Please refresh your API key in the AI Studio Settings.");
+      } else {
+        console.error("Voice Welcome Error:", error);
+      }
+      
       return null;
     }
   }

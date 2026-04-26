@@ -1896,7 +1896,13 @@ export default function App() {
       setHandymen(dbHandymen);
     }, (error) => {
       console.error("Handymen feed error:", error);
-      toast.error("Low data or connection issue. Some features may be limited.");
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'handymen');
+      } catch (e) {
+        // handleFirestoreError throws, but we want to just log it and show toast
+        console.error("Handymen feed error details:", e);
+      }
+      toast.error(t(currentLanguage, "Low data or connection issue. Some features may be limited."));
     });
 
     let unsubscribeUserDoc: (() => void) | null = null;
@@ -1970,14 +1976,16 @@ export default function App() {
 
   // Handyman Seeding logic moved out of onSnapshot for performance
   useEffect(() => {
-    if (handymen.length > 0 && currentUser?.email === 'yomz84.dm@gmail.com') {
+    if (currentUser?.email === 'yomz84.dm@gmail.com') {
       const existingIds = new Set(handymen.map(h => h.id));
       const missingPros = INITIAL_HANDYMEN.filter(pro => !existingIds.has(pro.id));
       
       if (missingPros.length > 0) {
+        console.log(`Seeding ${missingPros.length} missing handymen...`);
         missingPros.forEach(async (pro) => {
           try {
-            await setDoc(doc(db, 'handymen', pro.id), pro);
+            const proWithUserId = { ...pro, userId: currentUser.uid };
+            await setDoc(doc(db, 'handymen', pro.id), proWithUserId);
           } catch (e) {
             console.error(`Failed to seed pro ${pro.id}:`, e);
           }
@@ -2246,35 +2254,69 @@ export default function App() {
     }
   };
 
+  const getAuthErrorMessage = (error: any) => {
+    console.error('Unified Auth Error detail:', {
+      code: error.code,
+      message: error.message,
+      customData: error.customData,
+      name: error.name,
+      stack: error.stack
+    });
+
+    switch (error.code) {
+      case 'auth/network-request-failed':
+        return t(currentLanguage, 'Connection issue detected. Please check your internet or data connection and try again.');
+      case 'auth/internal-error':
+        return t(currentLanguage, 'There was a problem signing you in due to a temporary connection drop. Please wait a moment and try again.');
+      case 'auth/timeout':
+        return t(currentLanguage, 'The login request timed out. This usually happens on slow data connections. Please try moving to a better signal area.');
+      case 'auth/operation-not-allowed':
+        return "Sign-in method is currently disabled. Please contact the administrator.";
+      case 'auth/popup-blocked':
+        return "Login popup was blocked by your browser. Please allow popups for this site.";
+      case 'auth/popup-closed-by-user':
+        return null; // Don't show error for manual cancel
+      case 'auth/email-already-in-use':
+        return "An account already exists with this email address.";
+      case 'auth/weak-password':
+        return "Your password is too weak. Please use at least 6 characters.";
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-login-credentials':
+        return "Invalid email or password. Please double-check your credentials.";
+      case 'auth/too-many-requests':
+        return "Too many failed login attempts. Your account has been temporarily disabled. Please try again later.";
+      case 'auth/user-disabled':
+        return "This account has been disabled. Please contact support.";
+      case 'auth/invalid-email':
+        return "Please enter a valid email address.";
+      case 'auth/admin-restricted-operation':
+        return "This action is restricted by system policy. Please contact your administrator.";
+      default:
+        return error.message || "An unexpected error occurred during login. Please try again in a moment.";
+    }
+  };
+
   const handleGoogleLogin = async () => {
     try {
+      setAuthError(null);
+      setAuthLoading(true);
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
       setShowAuthModal(false);
       toast.success(t(currentLanguage, 'welcomeBack'));
     } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user') {
-        console.log('User cancelled login.');
-      } else {
-        console.error('Login Error details:', {
-          code: error.code,
-          message: error.message,
-          customData: error.customData,
-          name: error.name,
-          stack: error.stack
-        });
-        let errorMessage = error.message;
-        if (error.code === 'auth/operation-not-allowed') {
-          errorMessage = "Google sign-in is not enabled for this project.";
-        } else if (error.code === 'auth/popup-blocked') {
-          errorMessage = "Popup was blocked by your browser. Please allow popups.";
-        } else if (error.code === 'auth/admin-restricted-operation') {
-          errorMessage = "Google login is restricted. Please check your project settings.";
-        }
+      const errorMessage = getAuthErrorMessage(error);
+      if (errorMessage) {
         setAuthError(errorMessage);
-        toast.error("Login Error", { description: errorMessage });
+        toast.error(t(currentLanguage, "Login Problem"), { 
+          description: errorMessage,
+          duration: 6000 // Show longer for connection errors
+        });
       }
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -2306,26 +2348,14 @@ export default function App() {
         toast.success(t(currentLanguage, 'resetEmailSent'));
       }
     } catch (error: any) {
-      console.error('Auth Error:', error);
-      let errorMessage = error.message;
-      
-      // Map common Firebase auth errors to more user-friendly messages if needed
-      if (error.code === 'auth/operation-not-allowed') {
-        errorMessage = "Email/Password sign-in is not enabled. Please contact support.";
-      } else if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "An account already exists with this email.";
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = "Password is too weak. Please use at least 6 characters.";
-      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        errorMessage = "Invalid email or password.";
-      } else if (error.code === 'auth/admin-restricted-operation') {
-        errorMessage = "This operation is restricted. Please check your permissions.";
-      } else if (error.code === 'auth/popup-blocked') {
-        errorMessage = "Popup was blocked by your browser. Please allow popups for this site.";
+      const errorMessage = getAuthErrorMessage(error);
+      if (errorMessage) {
+        setAuthError(errorMessage);
+        toast.error(t(currentLanguage, "Authentication Problem"), { 
+          description: errorMessage,
+          duration: 6000
+        });
       }
-
-      setAuthError(errorMessage);
-      toast.error("Authentication Error", { description: errorMessage });
     } finally {
       setAuthLoading(false);
     }
@@ -5034,15 +5064,22 @@ export default function App() {
                       <button 
                         type="button"
                         onClick={handleGoogleLogin}
-                        className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
+                        disabled={authLoading}
+                        className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
-                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                        </svg>
-                        Google
+                        {authLoading ? (
+                           <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            </svg>
+                            Google
+                          </>
+                        )}
                       </button>
                     )}
 

@@ -1,6 +1,11 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, getDocFromServer, doc } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  getDocFromServer, 
+  doc, 
+  enableIndexedDbPersistence 
+} from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -37,6 +42,19 @@ try {
   } else {
     firestoreDb = getFirestore(app);
     console.log('Firestore initialized with default database');
+  }
+
+  // Enable persistence if in browser and not in an restricted environment
+  if (typeof window !== 'undefined') {
+    enableIndexedDbPersistence(firestoreDb).catch((err) => {
+      if (err.code === 'failed-precondition') {
+        // Multiple tabs open, persistence can only be enabled in one tab at a a time.
+        console.warn('Persistence failed-precondition');
+      } else if (err.code === 'unimplemented') {
+        // The current browser does not support all of the features required to enable persistence
+        console.warn('Persistence unimplemented');
+      }
+    });
   }
 } catch (error) {
   console.error("Firestore initialization failed. Check your firebase-applet-config.json", error);

@@ -21,6 +21,7 @@
     "source": "functions"
   },
   "firestore": {
+    "database": "ai-studio-60842af9-dc8f-47e0-9c8d-566745e1fa58",
     "rules": "firestore.rules"
   }
 }

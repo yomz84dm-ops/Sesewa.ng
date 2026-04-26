@@ -1,6 +1,6 @@
 # Ṣe Ṣe Wá - Handyman & Professional Marketplace
 
-Ṣe Ṣe Wá is a modern, standalone marketplace for finding and booking local handyman and professional services across Nigeria. Built with React, Tailwind CSS, and Firebase, it offers a secure and user-friendly platform connecting customers with verified professionals.
+Ṣe Ṣe Wá is a modern, standalone marketplace for finding and booking local handyman and professional services across Nigeria. Built with React, Tailwind CSS, and Firebase, it offers a secure and seamless experience for both customers and service providers.
 
 ## 🚀 Features
 
@@ -18,10 +18,10 @@
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: React 19, Vite, Tailwind CSS 4
+- **Frontend**: React 18, Vite, Tailwind CSS
 - **Animations**: Motion (Framer Motion)
 - **Icons**: Lucide React
-- **Backend**: Firebase (Authentication, Firestore, Cloud Functions)
+- **Backend**: Firebase (Authentication, Firestore)
 - **Payments**: Paystack API
 - **State Management**: React Hooks (useState, useEffect, useContext)
 
@@ -29,15 +29,15 @@
 
 ### Prerequisites
 
-- Node.js v22 or higher
+- Node.js (v18 or higher)
 - npm or yarn
 
 ### Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yomz84dm-ops/Sesewa.ng.git
-   cd Sesewa.ng
+   git clone https://github.com/yourusername/sesewa-app.git
+   cd sesewa-app
    ```
 
 2. Install dependencies:
@@ -50,7 +50,7 @@
    ```bash
    cp .env.example .env
    ```
-   Fill in your Paystack, Firebase, and ReCAPTCHA credentials.
+   Fill in your Paystack and Firebase credentials.
 
 4. Start the development server:
    ```bash
@@ -59,62 +59,30 @@
 
 ## 🚢 Deployment
 
-### Firebase Hosting (Recommended)
+### Firebase Hosting (Option 1 - Recommended)
 
-1. **Install Firebase CLI:**
-   ```bash
-   npm install -g firebase-tools
-   ```
+1.  **Install Firebase CLI:**
+    ```bash
+    npm install -g firebase-tools
+    ```
 
-2. **Login:**
-   ```bash
-   firebase login
-   ```
+2.  **Login:**
+    ```bash
+    firebase login
+    ```
 
-3. **Build and deploy:**
-   ```bash
-   npm run build
-   firebase deploy
-   ```
+3.  **Build and deploy:**
+    ```bash
+    npm run build
+    firebase deploy
+    ```
 
-4. **Connect Custom Domain:**
-   - Go to the [Firebase Console](https://console.firebase.google.com).
-   - Navigate to your project's Hosting section.
-   - Click **"Add Custom Domain"**.
-   - Follow the DNS instructions provided by Firebase.
+4.  **Connect Custom Domain:**
+    *   Go to the [Firebase Console](https://console.firebase.google.com/project/ai-studio-applet-webapp-5d01f/hosting/main).
+    *   Click **"Add Custom Domain"**.
+    *   Follow the DNS instructions provided by Firebase.
 
-### Vercel Deployment
-
-1. **Connect repository to Vercel:**
-   ```bash
-   npm install -g vercel
-   vercel
-   ```
-
-2. **Configure environment variables in Vercel dashboard**
-
-3. **Deploy:**
-   ```bash
-   vercel --prod
-   ```
-
-### Netlify Deployment
-
-1. **Connect repository to Netlify via GitHub**
-
-2. **Add environment variables in Netlify dashboard**
-
-3. **Configure build settings:**
-   - Build command: `npm run build`
-   - Publish directory: `dist`
-
-## 🔐 Security
-
-- All sensitive environment variables are managed via `.env` files
-- Firebase API keys are loaded from environment variables
-- Firestore security rules enforce user authentication and data isolation
-- Admin access is controlled via Firestore custom claims
-- ReCAPTCHA v3 protects against bot attacks
+### Vercel / Netlify
 
 ## 📄 License
 
