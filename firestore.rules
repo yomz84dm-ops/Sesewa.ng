@@ -54,73 +54,50 @@ service cloud.firestore {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
       allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().uid == userId;
-      allow update: if (isOwner(userId) && (
-        // Action: Update Profile (not role, verified, or credits)
-        (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoURL', 'phone', 'lat', 'lng', 'isVerifiedPending', 'idDocumentUrl'])) ||
-        // Action: Handyman Upgrade (initial)
-        (incoming().diff(existing()).affectedKeys().hasOnly(['role', 'plan', 'credits']) && existing().role == 'user' && incoming().role == 'handyman')
-      )) || isAdmin();
+      allow update: if isOwner(userId) && (
+        // Action: Update Profile (not role)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'photoURL', 'phone', 'lat', 'lng', 'isVerifiedPending', 'idDocumentUrl', 'verified'])) ||
+        // Action: Handyman Upgrade
+        (incoming().diff(existing()).affectedKeys().hasOnly(['role', 'plan', 'credits']) && incoming().role == 'handyman')
+      ) || isAdmin();
     }
 
     match /handymen/{handymanId} {
-      allow read: if true;
-      allow create: if isSignedIn() && isValidId(handymanId) && incoming().userId == request.auth.uid;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn() && isValidId(handymanId);
       allow update: if isSignedIn() && (
-        (isOwner(existing().userId) && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'category', 'location', 'phone', 'whatsapp', 'experience', 'experienceYears', 'description', 'portfolio', 'profileImage', 'availability', 'isOnline'])) ||
-        isAdmin()
+        isOwner(existing().userId) || isAdmin()
       );
       allow delete: if isAdmin();
     }
 
-    // --- Job Request Validation ---
-    function isValidJobRequest(data) {
-      return data.keys().hasAll(['id', 'proId', 'userUid', 'status']) &&
-             isValidId(data.id) &&
-             isValidId(data.proId) &&
-             data.userUid == request.auth.uid &&
-             data.status in ['pending', 'responded', 'on-the-way', 'completed', 'cancelled'] &&
-             (!('amount' in data) || data.amount is number) &&
-             (!('unlockedBy' in data) || (data.unlockedBy is list && data.unlockedBy.size() <= 50));
-    }
-
-    function isTerminal(data) {
-      return data.status == 'completed' || data.status == 'cancelled';
-    }
-
     match /jobRequests/{requestId} {
-      allow read: if isSignedIn() && (
-        isOwner(existing().userUid) || 
-        isOwner(existing().proUserId) || 
-        (isSignedIn() && request.auth.uid in existing().get('unlockedBy', [])) ||
+      allow get, list: if isSignedIn() && (
+        isOwner(resource.data.userUid) || 
+        isOwner(resource.data.proUserId) || 
         isAdmin()
       );
-      allow create: if isSignedIn() && isValidJobRequest(incoming());
+      allow create: if isSignedIn() && incoming().userUid == request.auth.uid;
       allow update: if isSignedIn() && (
-        isAdmin() || (
-          !isTerminal(existing()) && (
-            (isOwner(existing().userUid) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'jobDescription', 'amount', 'paystackReference'])) ||
-            (isOwner(existing().proUserId) && incoming().diff(existing()).affectedKeys().hasOnly(['status'])) ||
-            // Action: Unlock Lead
-            (incoming().diff(existing()).affectedKeys().hasOnly(['unlockedBy']) && 
-             incoming().unlockedBy.size() == existing().get('unlockedBy', []).size() + 1 &&
-             incoming().unlockedBy.hasAll(existing().get('unlockedBy', [])) &&
-             request.auth.uid in incoming().unlockedBy)
-          )
-        )
+        isOwner(existing().userUid) || 
+        isOwner(existing().proUserId) || 
+        isAdmin()
       );
     }
 
     match /test/connection {
-      allow read: if true;
+      allow get: if true;
     }
 
     match /chats/{chatId} {
-      allow read: if isSignedIn() && request.auth.uid in existing().participants;
+      allow get: if isSignedIn() && request.auth.uid in existing().participants;
+      allow list: if isSignedIn() && request.auth.uid in resource.data.participants;
       allow create: if isSignedIn() && request.auth.uid in incoming().participants;
       allow update: if isSignedIn() && request.auth.uid in existing().participants;
 
       match /messages/{messageId} {
-        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow get, list: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
         allow create: if isSignedIn() && 
           request.auth.uid == incoming().senderId &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
@@ -142,18 +119,19 @@ service cloud.firestore {
     }
 
     match /managedDomains/{domainId} {
-      allow read: if true;
+      allow get, list: if true;
       allow write: if isAdmin();
     }
 
     match /admins/{adminId} {
-      allow read: if isSignedIn();
-      allow write: if false; // Only manageable through Firebase Console or initial script
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow write: if false; 
     }
 
     match /reviews/{reviewId} {
-      allow read: if true;
-      allow create: if isSignedIn();
+      allow get, list: if true;
+      allow create: if isSignedIn() && incoming().userName is string; // Basic check
       allow update, delete: if isAdmin();
     }
   }

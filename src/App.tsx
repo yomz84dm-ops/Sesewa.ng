@@ -26,6 +26,7 @@ import {
   Sparkles,
   MessageCircle,
   CheckCircle2,
+  Check,
   Image as ImageIcon,
   Navigation,
   Clock,
@@ -67,7 +68,9 @@ import {
   Trash2,
   Edit,
   X,
-  Tag
+  Tag,
+  Loader2,
+  Volume2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -92,7 +95,6 @@ import {
   setDoc, 
   getDoc,
   updateDoc,
-  runTransaction,
   getDocFromServer,
   deleteDoc,
   Timestamp
@@ -849,7 +851,16 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const d = R * c; // Distance in km
   return d;
 }
-
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
 // --- Components ---
 const StarRating = ({ rating, onRate, interactive = false }: { rating: number, onRate?: (r: number) => void, interactive?: boolean }) => {
@@ -1274,7 +1285,94 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+
+  const fetchAudio = async () => {
+    try {
+      console.log(`Fetching audio for language: ${lang}`);
+      const base64Audio = await geminiService.speakWelcome(lang);
+      if (!base64Audio) {
+        console.warn("No audio data returned from AI service");
+        setIsLoading(false);
+        return;
+      }
+
+      console.log(`Received audio data, length: ${base64Audio.length}`);
+
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
+          sampleRate: 24000
+        });
+      }
+      const ctx = audioContextRef.current;
+
+      // Decode base64 to ArrayBuffer
+      const binaryString = atob(base64Audio);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Convert Int16 PCM to Float32
+      // Ensure we have an even number of bytes for Int16
+      const pcmLen = Math.floor(len / 2);
+      const int16Data = new Int16Array(bytes.buffer, 0, pcmLen);
+      const float32Data = new Float32Array(pcmLen);
+      
+      let hasData = false;
+      for (let i = 0; i < pcmLen; i++) {
+        const val = int16Data[i] / 32768.0;
+        float32Data[i] = val;
+        if (Math.abs(val) > 0.01) hasData = true;
+      }
+
+      if (!hasData) {
+        console.warn("Decoded audio buffer seems to be silent (all samples near zero)");
+      } else {
+        console.log("Audio buffer contains non-silent data");
+      }
+
+      // Create AudioBuffer
+      const audioBuffer = ctx.createBuffer(1, pcmLen, 24000);
+      audioBuffer.getChannelData(0).set(float32Data);
+      audioBufferRef.current = audioBuffer;
+      setIsLoading(false);
+      
+      // Auto-play attempt
+      setTimeout(() => {
+        if (audioBufferRef.current) {
+          playBuffer(audioBufferRef.current);
+        }
+      }, 300);
+    } catch (e) {
+      console.error("Fetch audio error:", e);
+      setIsLoading(false);
+    }
+  };
+
+  const playBuffer = async (buffer: AudioBuffer) => {
+    const ctx = audioContextRef.current;
+    if (!ctx) return;
+    
+    // Resume context safely
+    try {
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+    } catch (err) {
+      console.warn("Could not resume AudioContext:", err);
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.onended = () => setIsPlaying(false);
+    sourceNodeRef.current = source;
+    setIsPlaying(true);
+    source.start();
+  };
 
   const handlePlay = async () => {
     if (isPlaying) {
@@ -1282,116 +1380,56 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
         try {
           sourceNodeRef.current.stop();
         } catch (e) {
-          // Ignore if already stopped
+          console.warn("Error stopping audio playback:", e);
         }
       }
       setIsPlaying(false);
       return;
     }
 
-    // Initialize AudioContext immediately on user gesture to avoid "two clicks" issue
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 24000
-      });
+    if (!audioBufferRef.current) {
+      setIsLoading(true);
+      await fetchAudio();
     }
-
-    const ctx = audioContextRef.current;
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
-
-    setIsLoading(true);
-    try {
-      const base64Audio = await geminiService.speakWelcome(lang);
-      if (!base64Audio) {
-        setIsLoading(false);
-        toast.error("HandyPadi voice is unavailable in this language right now.", {
-          description: "Try again in a few moments."
-        });
-        return;
-      }
-
-      // Decode base64 to ArrayBuffer
-      const binaryString = atob(base64Audio);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      // Convert Int16 PCM to Float32
-      const int16Data = new Int16Array(bytes.buffer);
-      const float32Data = new Float32Array(int16Data.length);
-      for (let i = 0; i < int16Data.length; i++) {
-        float32Data[i] = int16Data[i] / 32768.0;
-      }
-
-      // Create AudioBuffer
-      const audioBuffer = ctx.createBuffer(1, float32Data.length, 24000);
-      audioBuffer.getChannelData(0).set(float32Data);
-
-      // Play
-      const source = ctx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(ctx.destination);
-      source.onended = () => setIsPlaying(false);
-      sourceNodeRef.current = source;
-      
-      setIsLoading(false);
-      setIsPlaying(true);
-      source.start();
-    } catch (error) {
-      console.error("Voice Welcome Error:", error);
-      setIsLoading(false);
-      setIsPlaying(false);
+    
+    if (audioBufferRef.current) {
+      playBuffer(audioBufferRef.current);
     }
   };
 
   useEffect(() => {
-    // Pre-warm the cache for the current language
-    geminiService.speakWelcome(lang).catch(() => {});
-
+    audioBufferRef.current = null; // Clear old buffer when language changes
+    setIsLoading(true);
+    fetchAudio();
     return () => {
-      if (sourceNodeRef.current) {
-        try { sourceNodeRef.current.stop(); } catch (e) {}
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+      try {
+        if (sourceNodeRef.current) {
+          sourceNodeRef.current.stop();
+          sourceNodeRef.current = null;
+        }
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+          audioContextRef.current.close().catch(err => console.error("Error closing AudioContext:", err));
+          audioContextRef.current = null;
+        }
+      } catch (err) {
+        console.warn("Audio cleanup error:", err);
       }
     };
   }, [lang]);
 
   return (
     <div className="flex items-center gap-1 sm:gap-3">
-      <button 
-        onClick={handlePlay}
-        disabled={isLoading}
-        className={`p-1.5 sm:p-3 rounded-full transition-all flex items-center gap-1 sm:gap-2 ${
-          isPlaying 
-            ? 'bg-blue-100 text-blue-600' 
-            : isLoading
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20'
-        }`}
-        title={isPlaying ? "Stop Welcome Message" : "Listen to Welcome Message"}
-      >
-        {isLoading ? (
-          <>
-            <RotateCcw className="animate-spin" size={16} />
-            <span className="text-[10px] sm:text-xs font-bold hidden sm:inline">Processing...</span>
-          </>
-        ) : isPlaying ? (
-          <>
-            <RotateCcw className="animate-spin" size={16} className="sm:w-[18px] sm:h-[18px]" />
-            <span className="text-[10px] sm:text-xs font-bold hidden sm:inline">Playing...</span>
-          </>
-        ) : (
-          <>
-            <Radio size={16} className="sm:w-[18px] sm:h-[18px]" />
-            <span className="text-[10px] sm:text-xs font-bold hidden sm:inline">Listen in {lang}</span>
-          </>
-        )}
-      </button>
+      {isLoading ? (
+        <div className="flex items-center gap-1 sm:gap-2 px-2 py-1 bg-blue-50 text-blue-600 rounded-full animate-pulse border border-blue-100">
+          <Loader2 className="animate-spin" size={14} />
+          <span className="text-[10px] sm:text-xs font-semibold">HandyPadi is preparing greeting...</span>
+        </div>
+      ) : isPlaying ? (
+        <div className="flex items-center gap-1 sm:gap-2 px-2 py-1 bg-green-50 text-green-600 rounded-full border border-green-100">
+          <Volume2 className="animate-bounce" size={14} />
+          <span className="text-[10px] sm:text-xs font-semibold">HandyPadi greeting...</span>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -1601,10 +1639,7 @@ const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: string) =
   );
 };
 
-console.log("App.tsx module evaluation started");
-
 export default function App() {
-  console.log("App component rendered");
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -1667,15 +1702,6 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    console.log("App initialized", {
-      hostname: window.location.hostname,
-      protocol: window.location.protocol,
-      isAuthReady,
-      hasCurrentUser: !!currentUser
-    });
-  }, [isAuthReady, currentUser]);
-
   // --- AI States ---
   const [aiMatchedProIds, setAiMatchedProIds] = useState<string[]>([]);
   const [isAiMatching, setIsAiMatching] = useState(false);
@@ -1730,7 +1756,7 @@ export default function App() {
             duration: 15000
           });
         } else {
-          console.log("AI Service Ready (Key detected)");
+          // AI Service Ready
         }
       } catch (e) {
         console.error("AI Service Error: Could not check AI keys.", e);
@@ -1861,26 +1887,11 @@ export default function App() {
 
     // Fetch all handymen from Firestore
     const handymenQuery = query(collection(db, 'handymen'), orderBy('rating', 'desc'));
-    const unsubscribeHandymen = onSnapshot(handymenQuery, async (snapshot) => {
+    const unsubscribeHandymen = onSnapshot(handymenQuery, (snapshot) => {
       const dbHandymen = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Handyman[];
-
-      // Check for missing initial pros and seed them - Only if admin
-      const existingIds = new Set(dbHandymen.map(h => h.id));
-      const missingPros = INITIAL_HANDYMEN.filter(pro => !existingIds.has(pro.id));
-      
-      if (missingPros.length > 0 && auth.currentUser?.email === 'yomz84.dm@gmail.com') {
-        console.log(`Seeding ${missingPros.length} missing professionals...`);
-        for (const pro of missingPros) {
-          try {
-            await setDoc(doc(db, 'handymen', pro.id), pro);
-          } catch (e) {
-            console.error(`Failed to seed pro ${pro.id}:`, e);
-          }
-        }
-      }
       
       setHandymen(dbHandymen);
     }, (error) => {
@@ -1957,6 +1968,23 @@ export default function App() {
     };
   }, []);
 
+  // Handyman Seeding logic moved out of onSnapshot for performance
+  useEffect(() => {
+    if (handymen.length > 0 && currentUser?.email === 'yomz84.dm@gmail.com') {
+      const existingIds = new Set(handymen.map(h => h.id));
+      const missingPros = INITIAL_HANDYMEN.filter(pro => !existingIds.has(pro.id));
+      
+      if (missingPros.length > 0) {
+        missingPros.forEach(async (pro) => {
+          try {
+            await setDoc(doc(db, 'handymen', pro.id), pro);
+          } catch (e) {
+            console.error(`Failed to seed pro ${pro.id}:`, e);
+          }
+        });
+      }
+    }
+  }, [handymen.length, currentUser?.email]);
   // Fetch disputes for admin
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'admin') {
@@ -2229,7 +2257,13 @@ export default function App() {
       if (error.code === 'auth/popup-closed-by-user') {
         console.log('User cancelled login.');
       } else {
-        console.error('Login Error:', error);
+        console.error('Login Error details:', {
+          code: error.code,
+          message: error.message,
+          customData: error.customData,
+          name: error.name,
+          stack: error.stack
+        });
         let errorMessage = error.message;
         if (error.code === 'auth/operation-not-allowed') {
           errorMessage = "Google sign-in is not enabled for this project.";
@@ -2482,7 +2516,7 @@ export default function App() {
       
       let matchesRadius = true;
       if (userLocation && useRadiusFilter) {
-        const dist = getDistance(userLocation.lat, userLocation.lng, h.lat || 0, h.lng || 0);
+        const dist = calculateDistance(userLocation.lat, userLocation.lng, h.lat || 0, h.lng || 0);
         matchesRadius = dist <= RADIUS_KM;
       }
 
@@ -2499,8 +2533,8 @@ export default function App() {
         if (a.isFeatured && !b.isFeatured) return -1;
         if (!a.isFeatured && b.isFeatured) return 1;
 
-        const distA = getDistance(userLocation.lat, userLocation.lng, a.lat, a.lng);
-        const distB = getDistance(userLocation.lat, userLocation.lng, b.lat, b.lng);
+        const distA = calculateDistance(userLocation.lat, userLocation.lng, a.lat, a.lng);
+        const distB = calculateDistance(userLocation.lat, userLocation.lng, b.lat, b.lng);
         return distA - distB;
       });
     } else {
@@ -2635,50 +2669,36 @@ export default function App() {
   const handleUnlockLead = async (requestId: string) => {
     if (!currentUser || currentUser.role !== 'handyman') return;
     
-    const userRef = doc(db, 'users', currentUser.uid);
-    const requestRef = doc(db, 'jobRequests', requestId);
+    const currentCredits = currentUser.credits || 0;
+    if (currentCredits < 1) {
+      setShowOutOfCredits(true);
+      return;
+    }
 
     try {
-      await runTransaction(db, async (transaction) => {
-        const userDoc = await transaction.get(userRef);
-        const requestDoc = await transaction.get(requestRef);
-
-        if (!userDoc.exists()) throw new Error("User document missing");
-        if (!requestDoc.exists()) throw new Error("Job request missing");
-
-        const userData = userDoc.data() as AppUser;
-        const requestData = requestDoc.data() as JobRequest;
+      const requestRef = doc(db, 'jobRequests', requestId);
+      const requestDoc = await getDoc(requestRef);
+      
+      if (requestDoc.exists()) {
+        const data = requestDoc.data() as JobRequest;
+        const unlockedBy = data.unlockedBy || [];
         
-        const unlockedBy = requestData.unlockedBy || [];
-        const currentCredits = userData.credits || 0;
-
-        if (unlockedBy.includes(currentUser.uid)) {
-          return; // Already unlocked
+        if (!unlockedBy.includes(currentUser.uid)) {
+          await updateDoc(requestRef, {
+            unlockedBy: [...unlockedBy, currentUser.uid]
+          });
+          
+          // Deduct credit
+          await updateDoc(doc(db, 'users', currentUser.uid), {
+            credits: currentCredits - 1
+          });
+          
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 3000);
         }
-
-        if (currentCredits < 1) {
-          throw new Error("INSUFFICIENT_CREDITS");
-        }
-
-        // Atomic update of both request and user credits
-        transaction.update(requestRef, {
-          unlockedBy: [...unlockedBy, currentUser.uid]
-        });
-
-        transaction.update(userRef, {
-          credits: currentCredits - 1
-        });
-      });
-
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-      toast.success("Lead unlocked successfully!");
-    } catch (error: any) {
-      if (error.message === "INSUFFICIENT_CREDITS") {
-        setShowOutOfCredits(true);
-      } else {
-        handleFirestoreError(error, OperationType.UPDATE, `jobRequests/${requestId}/unlock`);
       }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'jobRequests');
     }
   };
 
@@ -4518,7 +4538,7 @@ export default function App() {
                             <MapPin size={14} /> {handy.location}
                             {userLocation && (
                               <span className="text-blue-500 font-bold ml-1">
-                                ({getDistance(userLocation.lat, userLocation.lng, handy.lat, handy.lng).toFixed(1)}km)
+                                ({calculateDistance(userLocation.lat, userLocation.lng, handy.lat, handy.lng).toFixed(1)}km)
                               </span>
                             )}
                           </span>

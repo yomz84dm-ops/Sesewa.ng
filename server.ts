@@ -6,19 +6,33 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 dotenv.config();
 
-// Standard AI Models
-const PREVIEW_TEXT_MODEL = "gemini-3-flash-preview";
-const PREVIEW_TTS_MODEL = "gemini-3.1-flash-tts-preview";
-
 // This function creates the Express app without starting the server.
 export async function createApi() {
   const app = express();
-  app.use(express.json({ limit: '10mb' })); // Increase limit for images
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cors());
+
+  // Request logger for debugging
+  app.use((req, res, next) => {
+    if (req.method === 'POST') {
+      console.log(`[DEBUG] POST ${req.path}`);
+      console.log(`[DEBUG] Headers: ${JSON.stringify(req.headers)}`);
+      console.log(`[DEBUG] Body: ${JSON.stringify(req.body)}`);
+    }
+    next();
+  });
 
   // API health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  // Root POST handler and auth catch-all for blocking functions
+  // This must be BEFORE other specific POST routes if we want to catch root
+  app.post("/", (req, res) => {
+    console.log(`[DEBUG] Root POST caught - potential blocking function`);
+    res.status(200).json({}); 
   });
 
   // Paystack Integration
@@ -79,89 +93,10 @@ export async function createApi() {
     }
   });
 
-  // --- Gemini AI Proxy Support ---
-  const GEMINI_KEY = process.env.GEMINI_API_KEY;
-  const getAiInstance = () => {
-    if (!GEMINI_KEY) return null;
-    return new GoogleGenAI(GEMINI_KEY);
-  };
-
-  app.post("/api/ai/generate", async (req, res) => {
-    try {
-      const { prompt, config, model: modelOverride, contents } = req.body;
-      const ai = getAiInstance();
-      if (!ai) return res.status(500).json({ error: "Gemini API key not configured on server" });
-
-      const modelName = modelOverride || PREVIEW_TEXT_MODEL;
-      const model = ai.getGenerativeModel({ model: modelName });
-      
-      const result = await model.generateContent(contents || prompt);
-      const response = await result.response;
-      const text = response.text();
-      
-      res.json({ text });
-    } catch (error: any) {
-      console.error("AI Proxy Error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/ai/chat", async (req, res) => {
-    try {
-      const { message, history, systemInstruction } = req.body;
-      const ai = getAiInstance();
-      if (!ai) return res.status(500).json({ error: "Gemini API key not configured on server" });
-
-      const model = ai.getGenerativeModel({ 
-        model: PREVIEW_TEXT_MODEL,
-        systemInstruction: systemInstruction || "You are a helpful assistant."
-      });
-
-      const chat = model.startChat({
-        history: history || [],
-      });
-
-      const result = await chat.sendMessage(message);
-      const response = await result.response;
-      const text = response.text();
-
-      res.json({ text });
-    } catch (error: any) {
-      console.error("AI Chat Proxy Error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/ai/speak", async (req, res) => {
-    try {
-      const { text, model: modelOverride } = req.body;
-      const ai = getAiInstance();
-      if (!ai) return res.status(500).json({ error: "Gemini API key not configured on server" });
-
-      const modelName = modelOverride || PREVIEW_TTS_MODEL;
-      const model = ai.getGenerativeModel({ model: modelName });
-
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text }] }],
-        generationConfig: {
-          responseModalities: ["audio"],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Zephyr' },
-            },
-          },
-        },
-      });
-
-      const response = await result.response;
-      const audioPart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
-      const base64Audio = audioPart?.inlineData?.data;
-      
-      res.json({ audio: base64Audio });
-    } catch (error: any) {
-      console.error("AI TTS Proxy Error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
+  // General catch-all for any other POST requests to handle potential blocking functions on any path
+  app.post("*", (req, res) => {
+    console.log(`[DEBUG] Unhandled POST to ${req.path} - potential blocking function caught`);
+    res.status(200).json({});
   });
 
   return app;

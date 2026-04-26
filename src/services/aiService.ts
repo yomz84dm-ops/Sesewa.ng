@@ -1,4 +1,4 @@
-import axios from "axios";
+import { GoogleGenAI, Type } from "@google/genai";
 
 export interface PriceEstimation {
   minPrice: number;
@@ -10,50 +10,62 @@ export interface PriceEstimation {
   marketNotes: string;
 }
 
+const getAi = () => {
+  const key = process.env.GEMINI_API_KEY || "";
+  if (!key || key.trim().length < 5) {
+    console.warn("AI Service: GEMINI_API_KEY is missing or invalid.");
+    return null;
+  }
+  return new GoogleGenAI({ apiKey: key.trim() });
+};
+
+const PREVIEW_TEXT_MODEL = "gemini-3-flash-preview";
+
 export async function getPriceEstimation(
   task: string,
   location: string,
-  urgency: string,
-  country: string = "Nigeria"
+  country: string = "Nigeria",
+  currency: string = "NGN",
+  language: string = "English"
 ): Promise<PriceEstimation> {
-  const prompt = `
-    Task: "${task}"
-    Location: "${location}"
-    Urgency: "${urgency}"
-    Country: "${country}"
-
-    As an expert Nigerian handyman advisor, estimate a fair price range (in NGN) for this task.
-    Consider current inflation rates (2024-2025) and market realities in Nigeria.
-    - Provide a minimum and maximum labor cost.
-    - List technical factors that could influence the final quote.
-    - Suggest potential parts that might need replacement.
-    - Market Notes should be tailored to the business environment of ${country}.
-    
-    Return as JSON.
-`;
-
   try {
-    const response = await axios.post("/api/ai/generate", {
-      prompt,
+    const ai = getAi();
+    if (!ai) throw new Error("AI Service not configured.");
+
+    const prompt = `
+      You are the Global Ṣe Ṣe Wá Pricing Expert for the Pan-African Handyman Marketplace.
+      Analyze the following task: "${task}" in the location: "${location}, ${country}".
+      Provide a fair market price range in ${currency}.
+      - Account for the specific cost of living, logistics, and supply chain in "${location}, ${country}".
+      - Provide reasoning in "${language}".
+    `;
+
+    const response = await ai.models.generateContent({
+      model: PREVIEW_TEXT_MODEL,
+      contents: prompt,
       config: {
-        responseMimeType: "application/json"
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            minPrice: { type: Type.INTEGER },
+            maxPrice: { type: Type.INTEGER },
+            currency: { type: Type.STRING },
+            reasoning: { type: Type.STRING },
+            factors: { type: Type.ARRAY, items: { type: Type.STRING } },
+            partsNeeded: { type: Type.ARRAY, items: { type: Type.STRING } },
+            marketNotes: { type: Type.STRING }
+          },
+          required: ["minPrice", "maxPrice", "currency", "reasoning", "factors", "marketNotes"]
+        }
       }
     });
 
-    const text = response.data.text;
-    if (!text) {
-      throw new Error("AI returned an empty response.");
-    }
-    
-    try {
-      const jsonMatch = text.match(/\{.*\}/s);
-      return JSON.parse(jsonMatch ? jsonMatch[0] : text);
-    } catch (e) {
-      console.error("AI Service: Failed to parse JSON response", text);
-      throw new Error("AI returned invalid JSON format.");
-    }
-  } catch (error: any) {
+    const text = response.text;
+    if (!text) throw new Error("AI returned empty response");
+    return JSON.parse(text);
+  } catch (error) {
     console.error("Price Estimation Error:", error);
-    throw new Error(error.response?.data?.error || error.message || "Failed to get price estimation");
+    throw error;
   }
 }

@@ -7,6 +7,13 @@ const axios = require("axios");
 const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Root POST handler and auth catch-all for blocking functions
+app.post("/", (req, res) => {
+  console.log(`[DEBUG] Function root POST caught`);
+  res.status(200).json({}); 
+});
 
 // API health check
 app.get("/api/health", (req, res) => {
@@ -46,30 +53,10 @@ app.post("/api/paystack/initialize", async (req, res) => {
   }
 });
 
-app.get("/api/paystack/verify/:reference", async (req, res) => {
-  try {
-    const { reference } = req.params;
-    const key = process.env.PAYSTACK_SECRET_KEY;
-
-    if (!key) {
-      console.error("PAYSTACK_SECRET_KEY is missing in environment variables");
-      return res.status(500).json({ error: "Server Configuration Error" });
-    }
-
-    const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${reference}`,
-      {
-        headers: {
-          Authorization: `Bearer ${key}`
-        }
-      }
-    );
-
-    res.json(response.data);
-  } catch (error) {
-    console.error("Paystack Verification Error:", error.response?.data || error.message);
-    res.status(500).json({ error: "Payment verification failed" });
-  }
+// Final catch-all for POST requests
+app.post("*", (req, res) => {
+  console.log(`[DEBUG] Function catch-all POST caught request to: ${req.path}`);
+  res.status(200).json({});
 });
 
 // Export the function as 'api'

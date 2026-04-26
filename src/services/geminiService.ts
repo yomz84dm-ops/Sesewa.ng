@@ -1,167 +1,183 @@
-import axios from "axios";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 
-// Audio cache to save credits and improve responsiveness
-const audioCache: Record<string, string> = {};
-
-const WELCOME_MESSAGES: Record<string, string> = {
-  'English': "Welcome! I am Ṣe Ṣe Wá HandyPadi. How can I help you find the right pro today?",
-  'Yoruba': "E nle o! Emi ni Ṣe Ṣe Wá HandyPadi. Báwo ni mo ṣe le ràn yín lọ́wọ́ láti rí òṣìṣẹ́ tó tọ́ lónìí?",
-  'Igbo': "Nnọọ! Abụ m Ṣe Ṣe Wá HandyPadi. Kedu otu m ga-esi nyere gị aka ịchọta ezigbo ọkachamara taa?",
-  'Hausa': "Sannu da zuwa! Ni ne Ṣe Ṣe Wá HandyPadi. Ta yaya zan iya taimaka muku samun ƙwararren ma'aikaci a yau?",
-  'Pidgin': "Wetin dey hapun! I be Ṣe Ṣe Wá HandyPadi. How I fit help you find correct person to do your work today?"
+const getAi = () => {
+  const key = process.env.GEMINI_API_KEY || "";
+  if (!key || key.trim().length < 5) {
+    console.warn("AI Service: GEMINI_API_KEY is missing or invalid.");
+    return null;
+  }
+  return new GoogleGenAI({ apiKey: key.trim() });
 };
+
+const PREVIEW_TEXT_MODEL = "gemini-3-flash-preview";
+const PREVIEW_TTS_MODEL = "gemini-3.1-flash-tts-preview";
+
+const translationCache: Record<string, string> = {};
 
 export const geminiService = {
   /**
-   * Match a user's query against a list of handyman profiles
+   * 1. Smart Matching & Semantic Search
    */
   async matchHandymen(query: string, handymen: any[]) {
     try {
+      const ai = getAi();
+      if (!ai) return [];
+      
       const prompt = `
         User Query: "${query}"
-        
-        List of professionals: ${JSON.stringify(handymen.map(h => ({ id: h.id, category: h.category, skills: h.skills, bio: h.bio })))}
-        
-        Identify which professionals are the best match for the user's query. 
-        Return only their IDs in a JSON array.
+        Available Professionals:
+        ${JSON.stringify(handymen.map(h => ({ id: h.id, name: h.name, category: h.category, description: h.description })))}
+        Identify the top 3 most relevant professionals. Return only their IDs in a JSON array.
       `;
 
-      const response = await axios.post("/api/ai/generate", {
-        prompt,
+      const response = await ai.models.generateContent({
+        model: PREVIEW_TEXT_MODEL,
+        contents: prompt,
         config: {
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          }
         }
       });
-
-      const text = response.data.text;
+      
+      const text = response.text;
       if (!text) return [];
-      try {
-        // Look for JSON array in text
-        const jsonMatch = text.match(/\[.*\]/s);
-        return JSON.parse(jsonMatch ? jsonMatch[0] : text);
-      } catch (e) {
-        console.error("JSON Parse Error in matchHandymen:", text);
-        return [];
-      }
+      return JSON.parse(text);
     } catch (error) {
-      console.error("Handyman Matching error:", error);
+      console.error("Smart Matching Error:", error);
       return [];
     }
   },
 
   /**
-   * Refine a messy job description into a structured one
+   * 2. Job Description Assistant
    */
   async refineJobDescription(initialDescription: string) {
     try {
+      const ai = getAi();
+      if (!ai) return null;
+
       const prompt = `
         The user wants to request a handyman service with this initial description: "${initialDescription}"
-        
-        Refine this into a structured task summary. Identify:
-        1. The core service category (e.g., Plumbing, Electrical, Carpentry, Cleaning, Painting)
-        2. A punchy, clear title
-        3. A detailed, professional description
-        
-        Return as JSON with keys: category, title, refinedDescription.
+        Act as a helpful assistant. If the description is vague, ask 2-3 clarifying questions.
+        If it's good, provide a professional detailed version.
+        Return ONLY valid JSON: {"isRefined": boolean, "content": string}
       `;
 
-      const response = await axios.post("/api/ai/generate", {
-        prompt,
+      const response = await ai.models.generateContent({
+        model: PREVIEW_TEXT_MODEL,
+        contents: prompt,
         config: {
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              isRefined: { type: Type.BOOLEAN },
+              content: { type: Type.STRING }
+            },
+            required: ["isRefined", "content"]
+          }
         }
       });
-
-      const text = response.data.text;
+      
+      const text = response.text;
       if (!text) return null;
-      try {
-        const jsonMatch = text.match(/\{.*\}/s);
-        return JSON.parse(jsonMatch ? jsonMatch[0] : text);
-      } catch (e) {
-        console.error("JSON Parse Error in refineJobDescription:", text);
-        return null;
-      }
+      return JSON.parse(text);
     } catch (error) {
-      console.error("Job Refinement error:", error);
+      console.error("Refine Description Error:", error);
       return null;
     }
   },
 
   /**
-   * Generate "Pro Insights" from reviews
+   * 3. Review Summarization
    */
   async summarizeReviews(reviews: any[]) {
     if (reviews.length === 0) return "No reviews yet to summarize.";
-    
     try {
-      const prompt = `
-        Summarize the following reviews for a professional handyman into a concise "Pro Insights" paragraph (max 3 sentences). 
-        Focus on consistent strengths and any recurring issues mentioned.
-        
-        Reviews:
-        ${JSON.stringify(reviews.map(r => r.comment))}
-      `;
+      const ai = getAi();
+      if (!ai) return "AI not initialized";
 
-      const response = await axios.post("/api/ai/generate", { prompt });
-      return response.data.text;
+      const prompt = `Summarize these reviews into 3 concise sentences: ${JSON.stringify(reviews.map(r => r.comment))}`;
+      const response = await ai.models.generateContent({
+        model: PREVIEW_TEXT_MODEL,
+        contents: prompt
+      });
+      return response.text;
     } catch (error) {
       console.error("Review Summarization Error:", error);
-      return "Unable to summarize reviews at this time.";
+      return "Unable to summarize reviews.";
     }
   },
 
   /**
-   * Analyze an image of a household issue
+   * 4. Image-based Issue Identification
    */
   async analyzeIssueImage(base64Image: string, mimeType: string) {
     try {
+      const ai = getAi();
+      if (!ai) return null;
+
       const prompt = "Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation.";
 
-      const response = await axios.post("/api/ai/generate", {
-        contents: {
-          parts: [
-            { inlineData: { data: base64Image, mimeType } },
-            { text: prompt }
-          ]
-        },
+      const response = await ai.models.generateContent({
+        model: PREVIEW_TEXT_MODEL,
+        contents: [
+          { inlineData: { data: base64Image, mimeType } },
+          { text: prompt }
+        ],
         config: {
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              issue: { type: Type.STRING },
+              suggestedCategory: { type: Type.STRING },
+              explanation: { type: Type.STRING }
+            },
+            required: ["issue", "suggestedCategory", "explanation"]
+          }
         }
       });
-
-      const text = response.data.text;
+      
+      const text = response.text;
       if (!text) return null;
-      try {
-        const jsonMatch = text.match(/\{.*\}/s);
-        return JSON.parse(jsonMatch ? jsonMatch[0] : text);
-      } catch (e) {
-        console.error("JSON Parse Error in analyzeIssueImage:", text);
-        return null;
-      }
+      return JSON.parse(text);
     } catch (error) {
-      console.error("Image Analysis error:", error);
+      console.error("Image Analysis Error:", error);
       return null;
     }
   },
 
   /**
-   * HandyPadi Chat Assistant
+   * 5. HandyPadi Conversational AI
    */
   async handyPadiChat(message: string, history: any[] = [], currentLanguage: string = 'English') {
     try {
-      const response = await axios.post("/api/ai/chat", {
-        message,
-        history: history.map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.text }]
-        })),
-        systemInstruction: `You are HandyPadi, the AI assistant for Ṣe Ṣe Wá, a handyman marketplace in Nigeria. 
+      const ai = getAi();
+      if (!ai) return "I'm currently offline. Please ensure your GEMINI_API_KEY is configured in Settings.";
+
+      const formattedHistory = history.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }]
+      }));
+
+      const chat = ai.chats.create({
+        model: PREVIEW_TEXT_MODEL,
+        history: formattedHistory,
+        config: {
+          systemInstruction: `You are HandyPadi, the AI assistant for Ṣe Ṣe Wá, a handyman marketplace in Nigeria. 
           The user's preferred language is ${currentLanguage}. 
           Respond in ${currentLanguage} if possible, or use a natural mix of English and ${currentLanguage} (like Pidgin) if appropriate.
           Help users find pros, explain the escrow system, and answer general questions about the platform. 
           Be helpful, professional, and concise.`
+        }
       });
-      return response.data.text;
+
+      const response = await chat.sendMessage({ message });
+      return response.text;
     } catch (error) {
       console.error("HandyPadi Error:", error);
       return "I'm having trouble connecting right now. (Error: " + (error instanceof Error ? error.message : 'Unknown') + ")";
@@ -169,19 +185,45 @@ export const geminiService = {
   },
 
   /**
-   * Multi-lingual Translation
+   * 6. Real-time Translation
    */
-  async translateText(text: string, targetLanguage: string) {
-    try {
-      const prompt = `Translate the following text into ${targetLanguage}. 
-      Maintain the original tone and intent. If the text is already in ${targetLanguage}, return it as is.
-      
-      Text: "${text}"
-      
-      Return only the translated text.`;
+  async translateText(text: string, targetLanguage: string): Promise<string> {
+    if (!text) return "";
+    const langLower = targetLanguage.toLowerCase();
+    if (langLower === 'english' || langLower === 'en') return text;
+    
+    const cacheKey = `${text}:${langLower}`;
+    if (translationCache[cacheKey]) return translationCache[cacheKey];
 
-      const response = await axios.post("/api/ai/generate", { prompt });
-      return response.data.text || text;
+    try {
+      const ai = getAi();
+      if (!ai) return text;
+
+      let prompt = "";
+      if (langLower === 'pidgin') {
+        prompt = `You are a professional translator specializing in Nigerian Pidgin English. 
+        Translate the following message into natural, widely-understood Nigerian Pidgin.
+        Maintain the helpful and friendly tone of the original brand.
+        
+        Original English: "${text}"
+        
+        Return ONLY the translated Pidgin text. Do not include any quotes, notes, or explanations.`;
+      } else {
+        prompt = `You are a professional translator. 
+        Translate the following text into ${targetLanguage}. 
+        Return ONLY the translated text. Do not include quotes, notes, or any other text.
+        
+        Text to translate: "${text}"`;
+      }
+
+      const response = await ai.models.generateContent({
+        model: PREVIEW_TEXT_MODEL,
+        contents: prompt
+      });
+      
+      const result = response.text?.trim() || text;
+      translationCache[cacheKey] = result;
+      return result;
     } catch (error) {
       console.error("Translation Error:", error);
       return text;
@@ -189,32 +231,51 @@ export const geminiService = {
   },
 
   /**
-   * Get voice introduction in preferred language
+   * 7. Voice Welcome (TTS)
    */
-  async getVoiceIntro(language: string) {
-    if (audioCache[language]) return audioCache[language];
-
+  async speakWelcome(language: string) {
     try {
-      const originalText = WELCOME_MESSAGES['English'];
-      let translatedText = WELCOME_MESSAGES[language];
-      
-      if (!translatedText) {
-        const translationPrompt = `Translate into ${language}. Keep brand "Ṣe Ṣe Wá HandyPadi". Return only translation: "${originalText}"`;
-        const translationResponse = await axios.post("/api/ai/generate", { prompt: translationPrompt });
-        translatedText = translationResponse.data.text?.trim() || originalText;
+      const ai = getAi();
+      if (!ai) return null;
+
+      const welcomeText = `Welcome to Ṣe Ṣe Wá HandyPadi, your trusted partner for all home services in Nigeria. How can we help you today?`;
+      let translatedText = welcomeText;
+
+      const langLower = language.toLowerCase();
+      if (langLower !== 'en' && langLower !== 'english') {
+        // Call the property directly on the object instead of using 'this' to avoid binding issues
+        translatedText = await geminiService.translateText(welcomeText, language);
       }
 
-      const response = await axios.post("/api/ai/speak", {
-        text: `Say this cheerfully and naturally: ${translatedText}`
+      // If translation failed or returned empty, fallback to original
+      if (!translatedText || translatedText.trim().length === 0) {
+        console.warn("Translation returned empty, falling back to original English");
+        translatedText = welcomeText;
+      }
+
+      console.log(`TTS Welcome for ${language}: "${translatedText}"`);
+
+      // Simplified prompt for TTS - focus on the text to be spoken
+      const response = await ai.models.generateContent({
+        model: PREVIEW_TTS_MODEL,
+        contents: [{ parts: [{ text: translatedText }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: 'Zephyr' },
+            },
+          },
+        },
       });
 
-      const base64Audio = response.data.audio;
-      if (base64Audio) {
-        audioCache[language] = base64Audio;
+      const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!audioData) {
+        console.warn("TTS model returned no audio data part");
       }
-      return base64Audio;
+      return audioData;
     } catch (error) {
-      console.error("TTS Intro Error:", error);
+      console.error("Voice Welcome Error:", error);
       return null;
     }
   }
