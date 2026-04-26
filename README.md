@@ -36,8 +36,8 @@
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/sesewa-app.git
-   cd sesewa-app
+   git clone https://github.com/yomz84dm-ops/Sesewa.ng.git
+   cd Sesewa.ng
    ```
 
 2. Install dependencies:
@@ -78,7 +78,8 @@
    ```
 
 4. **Connect Custom Domain:**
-   - Go to the [Firebase Console](https://console.firebase.google.com/project/ai-studio-applet-webapp-5d01f/hosting/main).
+   - Go to the [Firebase Console](https://console.firebase.google.com).
+   - Navigate to your project's Hosting section.
    - Click **"Add Custom Domain"**.
    - Follow the DNS instructions provided by Firebase.
 
