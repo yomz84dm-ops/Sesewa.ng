@@ -70,7 +70,8 @@ import {
   X,
   Tag,
   Loader2,
-  Volume2
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -1316,7 +1317,6 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       }
 
       // Convert Int16 PCM to Float32
-      // Ensure we have an even number of bytes for Int16
       const pcmLen = Math.floor(len / 2);
       const int16Data = new Int16Array(bytes.buffer, 0, pcmLen);
       const float32Data = new Float32Array(pcmLen);
@@ -1328,24 +1328,16 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
         if (Math.abs(val) > 0.01) hasData = true;
       }
 
-      if (!hasData) {
-        console.warn("Decoded audio buffer seems to be silent (all samples near zero)");
-      } else {
-        console.log("Audio buffer contains non-silent data");
-      }
-
       // Create AudioBuffer
       const audioBuffer = ctx.createBuffer(1, pcmLen, 24000);
       audioBuffer.getChannelData(0).set(float32Data);
       audioBufferRef.current = audioBuffer;
       setIsLoading(false);
       
-      // Auto-play attempt
-      setTimeout(() => {
-        if (audioBufferRef.current) {
-          playBuffer(audioBufferRef.current);
-        }
-      }, 300);
+      // Removed auto-play attempt here
+      if (audioBufferRef.current) {
+        playBuffer(audioBufferRef.current);
+      }
     } catch (e) {
       console.error("Fetch audio error:", e);
       setIsLoading(false);
@@ -1390,17 +1382,13 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
     if (!audioBufferRef.current) {
       setIsLoading(true);
       await fetchAudio();
-    }
-    
-    if (audioBufferRef.current) {
+    } else {
       playBuffer(audioBufferRef.current);
     }
   };
 
   useEffect(() => {
-    audioBufferRef.current = null; // Clear old buffer when language changes
-    setIsLoading(true);
-    fetchAudio();
+    // Cleanup on unmount or language change
     return () => {
       try {
         if (sourceNodeRef.current) {
@@ -1411,6 +1399,7 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
           audioContextRef.current.close().catch(err => console.error("Error closing AudioContext:", err));
           audioContextRef.current = null;
         }
+        audioBufferRef.current = null;
       } catch (err) {
         console.warn("Audio cleanup error:", err);
       }
@@ -1425,11 +1414,25 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
           <span className="text-[10px] sm:text-xs font-semibold">HandyPadi is preparing greeting...</span>
         </div>
       ) : isPlaying ? (
-        <div className="flex items-center gap-1 sm:gap-2 px-2 py-1 bg-green-50 text-green-600 rounded-full border border-green-100">
-          <Volume2 className="animate-bounce" size={14} />
-          <span className="text-[10px] sm:text-xs font-semibold">HandyPadi greeting...</span>
-        </div>
-      ) : null}
+        <button 
+          onClick={handlePlay}
+          className="flex items-center gap-1 sm:gap-2 px-2 py-1 bg-red-50 text-red-600 rounded-full border border-red-100 hover:bg-red-100 transition-colors"
+        >
+          <VolumeX size={14} />
+          <span className="text-[10px] sm:text-xs font-semibold">Stop HandyPadi</span>
+        </button>
+      ) : (
+        <button 
+          onClick={handlePlay}
+          className="flex items-center gap-1 sm:gap-2 px-3 py-1 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all shadow-sm flex items-center group"
+          id="listen-welcome-btn"
+        >
+          <Volume2 size={14} className="group-hover:scale-110 transition-transform" />
+          <span className="text-[10px] sm:text-xs font-semibold ml-1">
+            {lang === 'Pidgin' ? 'Hear HandyPadi Greet You' : 'Listen to HandyPadi Greeting'}
+          </span>
+        </button>
+      )}
     </div>
   );
 };
@@ -1877,7 +1880,9 @@ export default function App() {
     async function testConnection() {
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
+        console.log("Firestore connection test: SUCCESS");
       } catch (error) {
+        console.error("Firestore connection test: FAILED", error);
         if (error instanceof Error && error.message.includes('the client is offline')) {
           console.error("Please check your Firebase configuration. The client is offline.");
         }
@@ -1886,7 +1891,8 @@ export default function App() {
     testConnection();
 
     // Fetch all handymen from Firestore
-    const handymenQuery = query(collection(db, 'handymen'), orderBy('rating', 'desc'));
+    const handymenQuery = collection(db, 'handymen');
+    
     const unsubscribeHandymen = onSnapshot(handymenQuery, (snapshot) => {
       const dbHandymen = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -1942,10 +1948,10 @@ export default function App() {
               setCurrentUser(newUser);
             }
           } catch (err) {
-            handleLoggedError(err, OperationType.GET, `users/${user.uid}`);
+            handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
           }
         }, (error) => {
-          handleLoggedError(error, OperationType.GET, `users/${user.uid}`);
+          handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
         });
 
         // Reset view to home page and all filters upon login

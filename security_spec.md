@@ -1,72 +1,27 @@
 # Security Specification - Ṣe Ṣe Wá
 
 ## Data Invariants
-1. A **User** profile must belong to the authenticated user (`uid` matches `request.auth.uid`).
-2. A **Handyman** profile can only be created by an admin or the user themselves (if linked by `userId`).
-3. A **JobRequest** must have a `userUid` that matches the sender.
-4. **Chat** participation is restricted to users in the `participants` array.
-5. **Messages** can only be sent by a participant of the parent chat.
-6. **Notifications** are private to the `userId`.
-7. **Disputes** must be raised by the user who was part of the original job.
+1. A **Handyman** profile must be linked to a valid authenticated user (`userId`).
+2. A **JobRequest** must have a valid `proId` and `userUid`.
+3. **Escrow Payments** can only be released by the `userUid` (client) or an admin.
+4. **Chat Messages** can only be read/written by participants of the chat.
+5. **Private User Data** (PII) must be restricted to the owner.
 
-## The "Dirty Dozen" Payloads (Red Team Tests)
+## The "Dirty Dozen" Payloads (Attack Vectors)
 
-### Payload 1: Identity Spoofing (User Profile)
-- **Action:** `create` on `/users/victim_uid`
-- **Data:** `{ "uid": "victim_uid", "email": "attacker@evil.com", "role": "admin" }`
-- **Expected:** `PERMISSION_DENIED` (UID mismatch)
+1. **Identity Spoofing**: Attempt to create a Handyman profile with a `userId` different from the authenticated user.
+2. **Review Bombing**: Attempt to create a review using another user's ID.
+3. **Escrow Theft**: Attempt to release payment for a job request where the attacker is not the client.
+4. **PII Leak**: Attempt to read the `users` collection document for another user.
+5. **Job Hijacking**: Attempt to update the status of a job request assigned to someone else.
+6. **Chat Snooping**: Attempt to read messages in a `chatId` where the user is not a participant.
+7. **System Field Injection**: Attempt to set `verified: true` or `ninVerified: true` on a handyman profile via the client SDK.
+8. **Resource Exhaustion**: Attempt to write a 1MB string into a `description` field.
+9. **Ghost Message**: Attempt to send a message into a chat as a different `senderId`.
+10. **State Skipping**: Attempt to move a job request from `pending` directly to `completed` without the intermediate steps/signatures.
+11. **Admin Escalation**: Attempt to set `role: "admin"` on own user profile.
+12. **Orphaned Writes**: Attempt to create a job request for a `proId` that doesn't exist.
 
-### Payload 2: Privilege Escalation (Role Change)
-- **Action:** `update` on `/users/my_uid`
-- **Data:** `{ "role": "admin" }`
-- **Expected:** `PERMISSION_DENIED` (Role field immutable for non-admins)
-
-### Payload 3: Orphaned Job Request
-- **Action:** `create` on `/jobRequests/job1`
-- **Data:** `{ "id": "job1", "proId": "non_existent_pro", "userUid": "my_uid", "status": "pending" }`
-- **Expected:** `PERMISSION_DENIED` (Pro must exist)
-
-### Payload 4: Unauthorized Chat Access
-- **Action:** `get` on `/chats/private_chat`
-- **Data:** N/A (User not in `participants`)
-- **Expected:** `PERMISSION_DENIED`
-
-### Payload 5: Spoofed Message Sender
-- **Action:** `create` on `/chats/chat1/messages/msg1`
-- **Data:** `{ "id": "msg1", "chatId": "chat1", "senderId": "victim_uid", "text": "spam" }`
-- **Expected:** `PERMISSION_DENIED` (Sender ID mismatch)
-
-### Payload 6: Resource Poisoning (ID Size)
-- **Action:** `create` on `/notifications/[1MB_STRING_ID]`
-- **Data:** `{ ... }`
-- **Expected:** `PERMISSION_DENIED` (ID too long)
-
-### Payload 7: Shadow Update (Ghost Fields)
-- **Action:** `update` on `/handymen/pro1`
-- **Data:** `{ "verified": true, "ghost_field": "injected" }`
-- **Expected:** `PERMISSION_DENIED` (Extra field not allowed)
-
-### Payload 8: Illegal Status Jump
-- **Action:** `update` on `/jobRequests/job1`
-- **Data:** `{ "status": "completed" }` (Current status is `cancelled`)
-- **Expected:** `PERMISSION_DENIED` (Terminal state lock)
-
-### Payload 9: PII Leak (User Search)
-- **Action:** `list` on `/users`
-- **Data:** `where("email", "==", "victim@secret.com")`
-- **Expected:** `PERMISSION_DENIED` (Blanket reads/list forbidden for PII)
-
-### Payload 10: Unauthorized Dispute Resolution
-- **Action:** `update` on `/disputes/disp1`
-- **Data:** `{ "status": "resolved" }` (User is not admin)
-- **Expected:** `PERMISSION_DENIED`
-
-### Payload 11: Malicious Array Growth
-- **Action:** `update` on `/jobRequests/job1`
-- **Data:** `{ "unlockedBy": ["huge_array_of_10000_uids..."] }`
-- **Expected:** `PERMISSION_DENIED` (Array size limit exceeded)
-
-### Payload 12: Client-Side Timestamp Spoofing
-- **Action:** `create` on `/notifications/notif1`
-- **Data:** `{ "createdAt": "2000-01-01T00:00:00Z" }`
-- **Expected:** `PERMISSION_DENIED` (Must use server timestamp)
+## Test Strategy
+All the above payloads MUST return `PERMISSION_DENIED`.
+Detailed tests will be implemented in `firestore.rules.test.ts`.

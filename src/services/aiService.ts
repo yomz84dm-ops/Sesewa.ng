@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
+import axios from "axios";
 
 export interface PriceEstimation {
   minPrice: number;
@@ -10,28 +11,14 @@ export interface PriceEstimation {
   marketNotes: string;
 }
 
-const getAi = () => {
-  const key = process.env.GEMINI_API_KEY || "";
-  if (!key || key.trim().length < 5) {
-    console.warn("AI Service: GEMINI_API_KEY is missing or invalid.");
-    return null;
-  }
-  return new GoogleGenAI({ apiKey: key.trim() });
-};
-
-const PREVIEW_TEXT_MODEL = "gemini-3-flash-preview";
-
 export async function getPriceEstimation(
   task: string,
   location: string,
-  country: string = "Nigeria",
-  currency: string = "NGN",
+  country: string,
+  currency: string,
   language: string = "English"
 ): Promise<PriceEstimation> {
   try {
-    const ai = getAi();
-    if (!ai) throw new Error("AI Service not configured.");
-
     const prompt = `
       You are the Global Ṣe Ṣe Wá Pricing Expert for the Pan-African Handyman Marketplace.
       Analyze the following task: "${task}" in the location: "${location}, ${country}".
@@ -40,9 +27,9 @@ export async function getPriceEstimation(
       - Provide reasoning in "${language}".
     `;
 
-    const response = await ai.models.generateContent({
-      model: PREVIEW_TEXT_MODEL,
-      contents: prompt,
+    const response = await axios.post("/api/ai/generate", {
+      model: "gemini-1.5-flash",
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -61,11 +48,9 @@ export async function getPriceEstimation(
       }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("AI returned empty response");
-    return JSON.parse(text);
-  } catch (error) {
-    console.error("Price Estimation Error:", error);
+    return JSON.parse(response.data.text || "{}");
+  } catch (error: any) {
+    console.error("Price Estimation Error:", error.response?.data || error.message);
     throw error;
   }
 }

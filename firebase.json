@@ -8,17 +8,10 @@
     ],
     "rewrites": [
       {
-        "source": "/api/**",
-        "function": "api"
-      },
-      {
         "source": "**",
         "destination": "/index.html"
       }
     ]
-  },
-  "functions": {
-    "source": "functions"
   },
   "firestore": {
     "database": "ai-studio-60842af9-dc8f-47e0-9c8d-566745e1fa58",

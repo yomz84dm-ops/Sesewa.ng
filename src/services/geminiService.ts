@@ -1,16 +1,18 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
-const getAi = () => {
-  const key = process.env.GEMINI_API_KEY || "";
-  if (!key || key.trim().length < 5) {
-    console.warn("AI Service: GEMINI_API_KEY is missing or invalid.");
-    return null;
-  }
-  return new GoogleGenAI({ apiKey: key.trim() });
+const getAPIKey = () => {
+  return (
+    (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
+    (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) ||
+    (import.meta as any).env?.GEMINI_API_KEY ||
+    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+    ""
+  );
 };
 
-const PREVIEW_TEXT_MODEL = "gemini-3-flash-preview";
-const PREVIEW_TTS_MODEL = "gemini-3.1-flash-tts-preview";
+const ai = new GoogleGenAI({ 
+  apiKey: getAPIKey()
+});
 
 const translationCache: Record<string, string> = {};
 
@@ -20,19 +22,16 @@ export const geminiService = {
    */
   async matchHandymen(query: string, handymen: any[]) {
     try {
-      const ai = getAi();
-      if (!ai) return [];
-      
       const prompt = `
         User Query: "${query}"
         Available Professionals:
-        ${JSON.stringify(handymen.map(h => ({ id: h.id, name: h.name, category: h.category, description: h.description })))}
+        ${JSON.stringify(handymen.map((h: any) => ({ id: h.id, name: h.name, category: h.category, description: h.description })))}
         Identify the top 3 most relevant professionals. Return only their IDs in a JSON array.
       `;
 
       const response = await ai.models.generateContent({
-        model: PREVIEW_TEXT_MODEL,
-        contents: prompt,
+        model: "gemini-3-flash-preview",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -41,10 +40,7 @@ export const geminiService = {
           }
         }
       });
-      
-      const text = response.text;
-      if (!text) return [];
-      return JSON.parse(text);
+      return JSON.parse(response.text || "[]");
     } catch (error) {
       console.error("Smart Matching Error:", error);
       return [];
@@ -56,9 +52,6 @@ export const geminiService = {
    */
   async refineJobDescription(initialDescription: string) {
     try {
-      const ai = getAi();
-      if (!ai) return null;
-
       const prompt = `
         The user wants to request a handyman service with this initial description: "${initialDescription}"
         Act as a helpful assistant. If the description is vague, ask 2-3 clarifying questions.
@@ -67,8 +60,8 @@ export const geminiService = {
       `;
 
       const response = await ai.models.generateContent({
-        model: PREVIEW_TEXT_MODEL,
-        contents: prompt,
+        model: "gemini-3-flash-preview",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -81,10 +74,7 @@ export const geminiService = {
           }
         }
       });
-      
-      const text = response.text;
-      if (!text) return null;
-      return JSON.parse(text);
+      return JSON.parse(response.text || "null");
     } catch (error) {
       console.error("Refine Description Error:", error);
       return null;
@@ -97,15 +87,12 @@ export const geminiService = {
   async summarizeReviews(reviews: any[]) {
     if (reviews.length === 0) return "No reviews yet to summarize.";
     try {
-      const ai = getAi();
-      if (!ai) return "AI not initialized";
-
-      const prompt = `Summarize these reviews into 3 concise sentences: ${JSON.stringify(reviews.map(r => r.comment))}`;
+      const prompt = `Summarize these reviews into 3 concise sentences: ${JSON.stringify(reviews.map((r: any) => r.comment))}`;
       const response = await ai.models.generateContent({
-        model: PREVIEW_TEXT_MODEL,
-        contents: prompt
+        model: "gemini-3-flash-preview",
+        contents: [{ role: "user", parts: [{ text: prompt }] }]
       });
-      return response.text;
+      return response.text || "Unable to summarize.";
     } catch (error) {
       console.error("Review Summarization Error:", error);
       return "Unable to summarize reviews.";
@@ -113,20 +100,22 @@ export const geminiService = {
   },
 
   /**
-   * 4. Image-based Issue Identification
+   * 4. Image Analysis (Multimodal)
    */
   async analyzeIssueImage(base64Image: string, mimeType: string) {
     try {
-      const ai = getAi();
-      if (!ai) return null;
-
       const prompt = "Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation.";
 
       const response = await ai.models.generateContent({
-        model: PREVIEW_TEXT_MODEL,
+        model: "gemini-3-flash-preview",
         contents: [
-          { inlineData: { data: base64Image, mimeType } },
-          { text: prompt }
+          {
+            role: "user",
+            parts: [
+              { inlineData: { data: base64Image, mimeType } },
+              { text: prompt }
+            ]
+          }
         ],
         config: {
           responseMimeType: "application/json",
@@ -141,10 +130,7 @@ export const geminiService = {
           }
         }
       });
-      
-      const text = response.text;
-      if (!text) return null;
-      return JSON.parse(text);
+      return JSON.parse(response.text || "null");
     } catch (error) {
       console.error("Image Analysis Error:", error);
       return null;
@@ -152,54 +138,47 @@ export const geminiService = {
   },
 
   /**
-   * 5. HandyPadi Conversational AI
+   * 5. HandyPadi Chat (General Help)
    */
   async handyPadiChat(message: string, history: any[] = [], currentLanguage: string = 'English') {
     try {
-      const ai = getAi();
-      if (!ai) return "I'm currently offline. Please ensure your GEMINI_API_KEY is configured in Settings.";
-
-      const formattedHistory = history.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.text }]
-      }));
-
-      const chat = ai.chats.create({
-        model: PREVIEW_TEXT_MODEL,
-        history: formattedHistory,
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          ...history.map((msg: any) => ({
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.text }]
+          })),
+          { role: 'user', parts: [{ text: message }] }
+        ],
         config: {
           systemInstruction: `You are HandyPadi, the AI assistant for Ṣe Ṣe Wá, a handyman marketplace in Nigeria. 
-          The user's preferred language is ${currentLanguage}. 
-          Respond in ${currentLanguage} if possible, or use a natural mix of English and ${currentLanguage} (like Pidgin) if appropriate.
-          Help users find pros, explain the escrow system, and answer general questions about the platform. 
-          Be helpful, professional, and concise.`
+            The user's preferred language is ${currentLanguage}. 
+            Respond in ${currentLanguage} if possible, or use a natural mix of English and ${currentLanguage} (like Pidgin) if appropriate.
+            Help users find pros, explain the escrow system, and answer general questions about the platform. 
+            Be helpful, professional, and concise.`
         }
       });
-
-      const response = await chat.sendMessage({ message });
-      return response.text;
+      return response.text || "I'm sorry, I couldn't generate a response.";
     } catch (error) {
       console.error("HandyPadi Error:", error);
-      return "I'm having trouble connecting right now. (Error: " + (error instanceof Error ? error.message : 'Unknown') + ")";
+      return "I'm having trouble connecting to the HandyPadi AI right now. Please try again later.";
     }
   },
 
   /**
-   * 6. Real-time Translation
+   * 6. Localization/Translation Helper
    */
-  async translateText(text: string, targetLanguage: string): Promise<string> {
+  async translateText(text: string, targetLanguage: string) {
     if (!text) return "";
     const langLower = targetLanguage.toLowerCase();
     if (langLower === 'english' || langLower === 'en') return text;
     
-    const cacheKey = `${text}:${langLower}`;
+    const cacheKey = `${text}_${targetLanguage}`;
     if (translationCache[cacheKey]) return translationCache[cacheKey];
 
     try {
-      const ai = getAi();
-      if (!ai) return text;
-
-      let prompt = "";
+       let prompt = "";
       if (langLower === 'pidgin') {
         prompt = `You are a professional translator specializing in Nigerian Pidgin English. 
         Translate the following message into natural, widely-understood Nigerian Pidgin.
@@ -217,83 +196,43 @@ export const geminiService = {
       }
 
       const response = await ai.models.generateContent({
-        model: PREVIEW_TEXT_MODEL,
-        contents: prompt
+        model: "gemini-3-flash-preview",
+        contents: [{ role: "user", parts: [{ text: prompt }] }]
       });
-      
-      const result = response.text?.trim() || text;
-      translationCache[cacheKey] = result;
-      return result;
-    } catch (error: any) {
-      const errorMsg = error?.message || "";
-      const isLeaked = errorMsg.includes("leaked") || errorMsg.includes("API key") || error?.status === "PERMISSION_DENIED";
-      
-      if (isLeaked) {
-        console.error("Ṣe Ṣe Wá Translation: Gemini API key invalid/leaked.");
-      } else {
-        console.error("Translation Error:", error);
-      }
+      const resultText = response.text || text;
+      translationCache[cacheKey] = resultText;
+      return resultText;
+    } catch (error) {
+      console.error("Translation Error:", error);
       return text;
     }
   },
 
-  /**
-   * 7. Voice Welcome (TTS)
-   */
   async speakWelcome(language: string) {
     try {
-      const ai = getAi();
-      if (!ai) return null;
-
       const welcomeText = `Welcome to Ṣe Ṣe Wá HandyPadi, your trusted partner for all home services in Nigeria. How can we help you today?`;
-      let translatedText = welcomeText;
-
-      const langLower = language.toLowerCase();
-      if (langLower !== 'en' && langLower !== 'english') {
-        // Call the property directly on the object instead of using 'this' to avoid binding issues
-        translatedText = await geminiService.translateText(welcomeText, language);
-      }
-
-      // If translation failed or returned empty, fallback to original
-      if (!translatedText || translatedText.trim().length === 0) {
-        console.warn("Translation returned empty, falling back to original English");
-        translatedText = welcomeText;
-      }
-
-      console.log(`TTS Welcome for ${language}: "${translatedText}"`);
-
-      // Simplified prompt for TTS - focus on the text to be spoken
+      let translatedText = await geminiService.translateText(welcomeText, language);
+      
       const response = await ai.models.generateContent({
-        model: PREVIEW_TTS_MODEL,
+        model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: translatedText }] }],
         config: {
-          responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: { voiceName: 'Zephyr' },
             },
           },
-        },
+          responseModalities: [Modality.AUDIO],
+          systemInstruction: `You are HandyPadi, the AI assistant for Ṣe Ṣe Wá, a handyman marketplace in Nigeria.`
+        }
       });
 
-      const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (!audioData) {
-        console.warn("TTS model returned no audio data part");
-      }
-      return audioData;
-    } catch (error: any) {
-      // Check for specifically leaked API key error or permission denied
-      const errorMsg = error?.message || "";
-      const isLeaked = errorMsg.includes("leaked") || errorMsg.includes("API key");
-      const isPermissionDenied = error?.status === "PERMISSION_DENIED" || error?.code === 403;
-
-      if (isLeaked || isPermissionDenied) {
-        console.error("Ṣe Ṣe Wá AI: GEMINI_API_KEY is restricted, leaked, or invalid. Please refresh your API key in the AI Studio Settings.");
-      } else {
-        console.error("Voice Welcome Error:", error);
-      }
-      
+      const audioData = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+      return audioData || null;
+    } catch (error) {
+      console.error("Voice Welcome Error:", error);
       return null;
     }
   }
 };
+;

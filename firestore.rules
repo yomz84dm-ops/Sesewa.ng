@@ -1,90 +1,102 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- Global Helpers ---
-    function isSignedIn() {
-      return request.auth != null;
-    }
     
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == 'yomz84.dm@gmail.com'
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function incom() { return request.resource.data; }
+    function exist() { return resource.data; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isAdmin() { 
+      return isVerified() && (
+        request.auth.token.email == 'yomz84.dm@gmail.com' || 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
 
-    // --- Handymen: Public Directory ---
-    match /handymen/{handyman} {
-      allow read, get, list: if true;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
+    // --- Collection Rules ---
+
+    // 1. Handymen (Public directory)
+    match /handymen/{handymanId} {
+      function isValidHandyman(data) {
+        return data.keys().hasAll(['id', 'name', 'category', 'userId']) &&
+               data.id is string && data.id.size() <= 128 &&
+               data.name is string && data.name.size() <= 100 &&
+               data.userId == request.auth.uid;
+      }
+      allow read, list: if true;
+      allow create: if isVerified() && isValidId(handymanId) && isValidHandyman(incom()) && 
+                      (incom().verified == false || isAdmin());
+      allow update: if isVerified() && 
+                      (isAdmin() || (isOwner(exist().userId) && 
+                       incom().diff(exist()).affectedKeys().hasOnly(['description', 'phone', 'whatsapp', 'isOnline', 'availability', 'profileImage', 'portfolio', 'location', 'lat', 'lng'])));
+      allow delete: if isAdmin() || (isVerified() && isOwner(exist().userId));
     }
 
-    // --- Users ---
+    // 2. Users (Private profiles)
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin();
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin();
+      function isValidUser(data) {
+        return data.uid == userId && (data.email is string || !('email' in data));
+      }
+      allow read: if isVerified() && (isOwner(userId) || isAdmin());
+      allow create: if isVerified() && isOwner(userId) && isValidUser(incom()) && (incom().role == 'user' || isAdmin());
+      allow update: if isVerified() && (isAdmin() || (isOwner(userId) && incom().diff(exist()).affectedKeys().hasOnly(['name', 'photoURL', 'phone', 'lat', 'lng'])));
     }
 
-    // --- Job Requests ---
+    // 3. Job Requests (Relational access)
     match /jobRequests/{requestId} {
-      allow read: if isSignedIn() && (
-        isOwner(resource.data.userUid) || 
-        isOwner(resource.data.proUserId) || 
-        isAdmin()
+      function isValidRequest(data) {
+        return data.keys().hasAll(['id', 'proId', 'userUid']);
+      }
+      allow read: if isVerified() && (isOwner(exist().userUid) || isOwner(exist().proUserId) || isAdmin());
+      allow create: if isVerified() && isValidRequest(incom()) && isValidId(requestId) && incom().userUid == request.auth.uid;
+      allow update: if isVerified() && (
+        isAdmin() || 
+        (isOwner(exist().userUid) && incom().diff(exist()).affectedKeys().hasOnly(['status', 'jobDescription', 'amount', 'paymentStatus'])) ||
+        (isOwner(exist().proUserId) && incom().diff(exist()).affectedKeys().hasOnly(['status']))
       );
-      allow write: if isSignedIn();
     }
 
-    // --- Chats & Messages ---
+    // 4. Chats & Messages
     match /chats/{chatId} {
-      allow read, write: if isSignedIn() && (
-        request.auth.uid in resource.data.participants ||
-        isAdmin()
-      );
+      allow read: if isVerified() && (request.auth.uid in exist().participants || isAdmin());
+      allow create: if isVerified() && request.auth.uid in incom().participants;
+      allow update: if isVerified() && (request.auth.uid in exist().participants && incom().diff(exist()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt', 'updatedAt']));
       
       match /messages/{messageId} {
-        allow read, write: if isSignedIn();
+        allow read: if isVerified() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
+        allow create: if isVerified() && 
+                       request.auth.uid == incom().senderId && 
+                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
       }
     }
 
-    // --- Notifications ---
-    match /notifications/{notificationId} {
-      allow read, write: if isSignedIn() && (
-        isOwner(resource.data.userId) || 
-        isOwner(existing().userId) ||
-        isAdmin()
-      );
+    // 5. Notifications
+    match /notifications/{id} {
+      allow read: if isVerified() && (isOwner(exist().userId) || isAdmin());
+      allow update: if isVerified() && isOwner(exist().userId) && incom().diff(exist()).affectedKeys().hasOnly(['read']);
+      allow delete: if isVerified() && isOwner(exist().userId);
     }
 
-    // --- Managed Domains ---
-    match /managedDomains/{domainId} {
+    // 6. Disputes
+    match /disputes/{id} {
+      allow read: if isVerified() && (isOwner(exist().raisedBy) || isAdmin());
+      allow create: if isVerified() && isOwner(incom().raisedBy);
+    }
+
+    // 7. Managed Domains (Readable for routing)
+    match /managedDomains/{id} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // --- Reviews ---
-    match /reviews/{reviewId} {
-      allow read: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
-    }
-
-    // --- Test Connection ---
+    // 8. Test connection
     match /test/connection {
-      allow get: if true;
-    }
-
-    // --- Default Deny Fallback (Must be exactly like this) ---
-    match /{document=**} {
-      allow read, write: if false;
+      allow read: if true;
+      allow write: if isAdmin();
     }
   }
 }
+
