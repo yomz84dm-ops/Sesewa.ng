@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 dotenv.config();
 
@@ -25,7 +26,14 @@ export async function createApi() {
     res.json({ status: "ok" });
   });
 
-  // PAYSTACK Integration
+  // Root POST handler and auth catch-all for blocking functions
+  // This must be BEFORE other specific POST routes if we want to catch root
+  app.post("/", (req, res) => {
+    console.log(`[DEBUG] Root POST caught - potential blocking function`);
+    res.status(200).json({}); 
+  });
+
+  // Paystack Integration
   const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
 
   app.post("/api/paystack/initialize", async (req, res) => {
@@ -57,6 +65,12 @@ export async function createApi() {
       console.error("Paystack initialization error:", error.response?.data || error.message);
       res.status(500).json({ error: "Failed to initialize payment" });
     }
+  });
+
+  // Paystack Callback: Redirect user back to the frontend after payment
+  app.get("/api/paystack/callback", (req, res) => {
+    const { reference } = req.query;
+    res.redirect(`/?reference=${reference}`);
   });
 
   app.get("/api/paystack/verify/:reference", async (req, res) => {
@@ -111,9 +125,18 @@ if (!isFunctionEnv && process.env.NODE_ENV !== "test") {
       });
     }
 
-    const PORT = parseInt(process.env.PORT || "3000", 10);
+      const PORT = parseInt(process.env.PORT || "8080", 10);
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   });
 }
+
+// Export for Firebase Cloud Functions
+let appInstance: express.Application;
+export const api = onRequest(async (req, res) => {
+  if (!appInstance) {
+    appInstance = await createApi();
+  }
+  appInstance(req, res);
+});

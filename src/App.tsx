@@ -121,6 +121,8 @@ interface ErrorBoundaryState {
 }
 
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: { hasError: boolean; error: any; };
+  props: any;
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -1931,6 +1933,7 @@ export default function App() {
       }
     }, 5000);
 
+<<<<<<< HEAD
     async function testConnection() {
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
@@ -1965,6 +1968,8 @@ export default function App() {
       toast.error(t(currentLanguage, "Low data or connection issue. Some features may be limited."));
     });
 
+=======
+>>>>>>> 8602096 (update firestore rules,update server and app config and firebase.json)
     let unsubscribeUserDoc: (() => void) | null = null;
     
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -2029,10 +2034,29 @@ export default function App() {
 
     return () => {
       if (unsubscribeUserDoc) unsubscribeUserDoc();
-      unsubscribeHandymen();
       unsubscribeAuth();
     };
   }, []);
+
+  // Fetch all handymen from Firestore - only after Auth is checked
+  useEffect(() => {
+    if (!isAuthReady) return;
+
+    const handymenQuery = query(collection(db, 'handymen'), orderBy('rating', 'desc'));
+    const unsubscribe = onSnapshot(handymenQuery, (snapshot) => {
+      const dbHandymen = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Handyman[];
+      
+      setHandymen(dbHandymen);
+    }, (error) => {
+      // If this still fails with "permissions", you must update your Firestore Rules in the console
+      console.warn("Handymen feed access limited:", error.message);
+    });
+
+    return () => unsubscribe();
+  }, [isAuthReady]);
 
   // Handyman Seeding logic moved out of onSnapshot for performance
   useEffect(() => {
