@@ -3,10 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "index.js",
+  "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx server.ts",
-    "start": "node server.ts",
+    "dev": "NODE_SERVE=true tsx server.ts",
+    "start": "NODE_ENV=production NODE_SERVE=true node dist/server.js",
+    "test": "vitest run",
+    "seed": "tsx seed.ts",
+    "clear-db": "tsx clear-db.ts",
+    "verify-credits": "tsx verify-credits.ts",
     "build": "vite build",
     "lint": "eslint .",
     "clean": "rm -rf dist"
@@ -16,7 +20,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
-    "axios": "^1.13.6",
+    "axios": "^1.15.2",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
@@ -44,5 +48,6 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
-  }
+  },
+  "license": "MIT"
 }

@@ -1,12 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { 
   getFirestore, 
-  getDocFromServer, 
-  doc, 
-  initializeFirestore 
+  connectFirestoreEmulator
 } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase
@@ -18,6 +16,16 @@ export const storage = getStorage(app);
 const dbId = firebaseConfig.firestoreDatabaseId;
 console.log(`[FIREBASE] Connecting to database: ${dbId}`);
 export const db = getFirestore(app, dbId);
+
+// Connect to Emulators in test or local development
+const isTest = typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
+const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+if (isTest || isLocal) {
+  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, 'localhost', 8080);
+  connectStorageEmulator(storage, 'localhost', 9199);
+}
 
 // Error Handling for Firestore Operations
 export enum OperationType {

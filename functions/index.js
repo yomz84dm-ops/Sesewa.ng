@@ -17,7 +17,10 @@ app.post("/", (req, res) => {
 
 // API health check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "Ṣe Ṣe Wá Marketplace API" });
+  const key = process.env.PAYSTACK_SECRET_KEY;
+  const isLoaded = !!key;
+  console.log(`[HEALTH] Paystack Secret loaded: ${isLoaded} (${isLoaded ? key.length : 0} chars)`);
+  res.json({ status: "ok", secret_detected: isLoaded, service: "Ṣe Ṣe Wá Marketplace API" });
 });
 
 // Paystack Integration
@@ -63,5 +66,6 @@ app.post("*", (req, res) => {
 exports.api = onRequest({ 
   region: "us-central1", 
   memory: "256MiB",
-  invoker: "public" 
+  invoker: "public",
+  secrets: ["PAYSTACK_SECRET_KEY"]
 }, app);
