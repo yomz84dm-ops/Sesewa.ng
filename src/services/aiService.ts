@@ -1,5 +1,12 @@
-import { Type } from "@google/genai";
-import axios from "axios";
+import { GoogleGenAI, Type } from "@google/genai";
+
+const getAPIKey = () => {
+  return process.env.GEMINI_API_KEY || "";
+};
+
+const ai = new GoogleGenAI({ 
+  apiKey: getAPIKey()
+});
 
 export interface PriceEstimation {
   minPrice: number;
@@ -27,10 +34,11 @@ export async function getPriceEstimation(
       - Provide reasoning in "${language}".
     `;
 
-    const response = await axios.post("/api/ai/generate", {
-      model: "gemini-1.5-flash",
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
+        systemInstruction: "You are the Global Ṣe Ṣe Wá Pricing Expert. Provide fair and accurate market price estimates for handyman tasks in Nigeria.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -48,9 +56,9 @@ export async function getPriceEstimation(
       }
     });
 
-    return JSON.parse(response.data.text || "{}");
+    return JSON.parse(response.text || "{}");
   } catch (error: any) {
-    console.error("Price Estimation Error:", error.response?.data || error.message);
+    console.error("Price Estimation Error:", error);
     throw error;
   }
 }

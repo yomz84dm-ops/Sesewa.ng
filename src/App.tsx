@@ -1285,9 +1285,33 @@ const SafetyTips = ({ lang }: { lang: string }) => {
 const VoiceWelcome = ({ lang }: { lang: string }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioBufferRef = useRef<AudioBuffer | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+
+  // Initialize context on first interaction
+  useEffect(() => {
+    const handleInteraction = () => {
+      if (!hasInteracted) {
+        setHasInteracted(true);
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
+            sampleRate: 24000
+          });
+        }
+        if (audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume();
+        }
+      }
+    };
+    window.addEventListener('click', handleInteraction, { once: true });
+    window.addEventListener('touchstart', handleInteraction, { once: true });
+    return () => {
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('touchstart', handleInteraction);
+    };
+  }, [hasInteracted]);
 
   const fetchAudio = async () => {
     try {
@@ -1298,8 +1322,6 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
         setIsLoading(false);
         return;
       }
-
-      console.log(`Received audio data, length: ${base64Audio.length}`);
 
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
@@ -1321,11 +1343,8 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       const int16Data = new Int16Array(bytes.buffer, 0, pcmLen);
       const float32Data = new Float32Array(pcmLen);
       
-      let hasData = false;
       for (let i = 0; i < pcmLen; i++) {
-        const val = int16Data[i] / 32768.0;
-        float32Data[i] = val;
-        if (Math.abs(val) > 0.01) hasData = true;
+        float32Data[i] = int16Data[i] / 32768.0;
       }
 
       // Create AudioBuffer
@@ -1334,8 +1353,8 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       audioBufferRef.current = audioBuffer;
       setIsLoading(false);
       
-      // Removed auto-play attempt here
-      if (audioBufferRef.current) {
+      // Auto-play if we have interaction
+      if (hasInteracted && audioBufferRef.current) {
         playBuffer(audioBufferRef.current);
       }
     } catch (e) {
@@ -1357,6 +1376,10 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       console.warn("Could not resume AudioContext:", err);
     }
 
+    if (sourceNodeRef.current) {
+      try { sourceNodeRef.current.stop(); } catch(e) {}
+    }
+
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(ctx.destination);
@@ -1369,11 +1392,7 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
   const handlePlay = async () => {
     if (isPlaying) {
       if (sourceNodeRef.current) {
-        try {
-          sourceNodeRef.current.stop();
-        } catch (e) {
-          console.warn("Error stopping audio playback:", e);
-        }
+        try { sourceNodeRef.current.stop(); } catch (e) {}
       }
       setIsPlaying(false);
       return;
@@ -1388,50 +1407,69 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
   };
 
   useEffect(() => {
-    // Cleanup on unmount or language change
+    // Reset buffer on language change and fetch in background
+    audioBufferRef.current = null;
+    setIsLoading(true);
+    fetchAudio();
+    
     return () => {
       try {
         if (sourceNodeRef.current) {
           sourceNodeRef.current.stop();
           sourceNodeRef.current = null;
         }
-        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-          audioContextRef.current.close().catch(err => console.error("Error closing AudioContext:", err));
-          audioContextRef.current = null;
-        }
-        audioBufferRef.current = null;
-      } catch (err) {
-        console.warn("Audio cleanup error:", err);
-      }
+      } catch (err) { }
     };
   }, [lang]);
 
   return (
-    <div className="flex items-center gap-1 sm:gap-3">
-      {isLoading ? (
-        <div className="flex items-center gap-1 sm:gap-2 px-2 py-1 bg-blue-50 text-blue-600 rounded-full animate-pulse border border-blue-100">
-          <Loader2 className="animate-spin" size={14} />
-          <span className="text-[10px] sm:text-xs font-semibold">HandyPadi is preparing greeting...</span>
-        </div>
-      ) : isPlaying ? (
+    <div className="flex items-center">
+      {isPlaying ? (
         <button 
           onClick={handlePlay}
-          className="flex items-center gap-1 sm:gap-2 px-2 py-1 bg-red-50 text-red-600 rounded-full border border-red-100 hover:bg-red-100 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 text-red-600 rounded-full border border-red-100 hover:bg-red-100 transition-all active:scale-95 group"
         >
-          <VolumeX size={14} />
-          <span className="text-[10px] sm:text-xs font-semibold">Stop HandyPadi</span>
+          <div className="flex items-end gap-0.5 h-3">
+            {[1, 2, 3, 4].map(i => (
+              <motion.div 
+                key={i} 
+                animate={{ height: [4, 12, 4] }}
+                transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.1 }}
+                className="w-1 bg-red-500 rounded-full" 
+              />
+            ))}
+          </div>
+          <span className="text-[9px] font-black uppercase tracking-widest">Stop</span>
         </button>
       ) : (
-        <button 
+        <motion.button 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          whileHover={{ scale: 1.05, y: -1 }}
+          whileTap={{ scale: 0.95 }}
           onClick={handlePlay}
-          className="flex items-center gap-1 sm:gap-2 px-3 py-1 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all shadow-sm flex items-center group"
+          className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full transition-all group overflow-hidden ${
+            isLoading 
+              ? 'bg-slate-50 text-slate-400 border border-slate-100 cursor-wait' 
+              : 'bg-blue-600 text-white hover:shadow-lg hover:shadow-blue-500/30'
+          }`}
           id="listen-welcome-btn"
         >
-          <Volume2 size={14} className="group-hover:scale-110 transition-transform" />
-          <span className="text-[10px] sm:text-xs font-semibold ml-1">
-            {lang === 'Pidgin' ? 'Hear HandyPadi Greet You' : 'Listen to HandyPadi Greeting'}
-          </span>
-        </button>
+          {isLoading ? (
+            <>
+              <Loader2 size={14} className="animate-spin text-blue-500" />
+              <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Preparing...</span>
+            </>
+          ) : (
+            <>
+              <Volume2 size={16} className="shrink-0" />
+              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
+                {lang === 'Pidgin' ? 'Padi Greet Me' : 'Hi Padi'}
+              </span>
+              <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white" />
+            </>
+          )}
+        </motion.button>
       )}
     </div>
   );
@@ -1720,8 +1758,24 @@ export default function App() {
   const [jobDescriptionInput, setJobDescriptionInput] = useState('');
   const [currentLanguage, setCurrentLanguage] = useState('English');
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const [hasInteractedForAudio, setHasInteractedForAudio] = useState(false);
   const languageMenuRef = useRef<HTMLDivElement>(null);
   const mobileLanguageMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleFirstInteraction = () => {
+      if (!hasInteractedForAudio) {
+        console.log("First user interaction detected, enabling audio context...");
+        setHasInteractedForAudio(true);
+      }
+    };
+    window.addEventListener('click', handleFirstInteraction, { once: true });
+    window.addEventListener('touchstart', handleFirstInteraction, { once: true });
+    return () => {
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
+    };
+  }, [hasInteractedForAudio]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -3423,7 +3477,7 @@ export default function App() {
               <Logo className="w-8 h-8 sm:w-10 sm:h-10 transition-transform group-hover:scale-110" />
               <div className="flex flex-col leading-none">
                 <span className="font-black text-sm sm:text-xl tracking-tighter text-blue-600 uppercase">Ṣe Ṣẹ Wá</span>
-                <span className="hidden sm:inline text-[8px] font-black text-slate-400 tracking-[0.2em] uppercase">Golding Limited</span>
+                <span className="hidden sm:inline text-[8px] font-black text-blue-600 tracking-[0.2em] uppercase">HandyPadi</span>
               </div>
             </div>
           </div>

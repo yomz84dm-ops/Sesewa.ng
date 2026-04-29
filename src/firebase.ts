@@ -16,9 +16,8 @@ export const storage = getStorage(app);
 
 // Initialize Firestore
 const dbId = firebaseConfig.firestoreDatabaseId;
-console.log(`[FIREBASE] Config DB ID from file:`, dbId);
+console.log(`[FIREBASE] Connecting to database: ${dbId}`);
 export const db = getFirestore(app, dbId);
-console.log(`[FIREBASE] Firestore instance created for database: ${dbId || '(default)'}`);
 
 // Error Handling for Firestore Operations
 export enum OperationType {

@@ -1,13 +1,11 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 const getAPIKey = () => {
-  return (
-    (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
-    (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) ||
-    (import.meta as any).env?.GEMINI_API_KEY ||
-    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-    ""
-  );
+  const key = process.env.GEMINI_API_KEY || "";
+  if (!key) {
+    console.warn("HandyPadi: GEMINI_API_KEY is not defined in the environment.");
+  }
+  return key;
 };
 
 const ai = new GoogleGenAI({ 
@@ -22,6 +20,7 @@ export const geminiService = {
    */
   async matchHandymen(query: string, handymen: any[]) {
     try {
+      console.log("HandyPadi: Matching handymen for query:", query);
       const prompt = `
         User Query: "${query}"
         Available Professionals:
@@ -33,6 +32,7 @@ export const geminiService = {
         model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
+          systemInstruction: "You are a professional matching expert for Ṣe Ṣe Wá. Identify the best pros based on user needs.",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.ARRAY,
@@ -52,6 +52,7 @@ export const geminiService = {
    */
   async refineJobDescription(initialDescription: string) {
     try {
+      console.log("HandyPadi: Refining job description...");
       const prompt = `
         The user wants to request a handyman service with this initial description: "${initialDescription}"
         Act as a helpful assistant. If the description is vague, ask 2-3 clarifying questions.
@@ -63,6 +64,7 @@ export const geminiService = {
         model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
+          systemInstruction: "You are a job description specialist for Ṣe Ṣe Wá. Help users articulate their needs effectively.",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -90,7 +92,10 @@ export const geminiService = {
       const prompt = `Summarize these reviews into 3 concise sentences: ${JSON.stringify(reviews.map((r: any) => r.comment))}`;
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }]
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        config: {
+          systemInstruction: "You are a helpful review analyst for Ṣe Ṣe Wá. Summarize user feedback accurately and concisely."
+        }
       });
       return response.text || "Unable to summarize.";
     } catch (error) {
@@ -104,6 +109,7 @@ export const geminiService = {
    */
   async analyzeIssueImage(base64Image: string, mimeType: string) {
     try {
+      console.log("HandyPadi: Analyzing image...");
       const prompt = "Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation.";
 
       const response = await ai.models.generateContent({
@@ -118,6 +124,7 @@ export const geminiService = {
           }
         ],
         config: {
+          systemInstruction: "You are a technical household damage expert. Identify problems correctly from images.",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -142,6 +149,7 @@ export const geminiService = {
    */
   async handyPadiChat(message: string, history: any[] = [], currentLanguage: string = 'English') {
     try {
+      console.log("HandyPadi: Chatting in language:", currentLanguage);
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
@@ -197,7 +205,10 @@ export const geminiService = {
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }]
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        config: {
+          systemInstruction: "You are a professional translator for Ṣe Ṣe Wá. Localize content accurately for Nigerian audiences."
+        }
       });
       const resultText = response.text || text;
       translationCache[cacheKey] = resultText;
@@ -210,24 +221,28 @@ export const geminiService = {
 
   async speakWelcome(language: string) {
     try {
+      console.log("HandyPadi: Generating voice greeting for language:", language);
       const welcomeText = `Welcome to Ṣe Ṣe Wá HandyPadi, your trusted partner for all home services in Nigeria. How can we help you today?`;
-      let translatedText = await geminiService.translateText(welcomeText, language);
+      let translatedText = await this.translateText(welcomeText, language);
       
       const response = await ai.models.generateContent({
         model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: translatedText }] }],
+        contents: [{ parts: [{ text: `Say cheerfully: ${translatedText}` }] }],
         config: {
+          systemInstruction: `You are HandyPadi, the AI assistant for Ṣe Ṣe Wá. You generate clear, warm, and professional Nigerian-accented English or localized speech.`,
+          responseModalities: ['AUDIO'],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: { voiceName: 'Zephyr' },
             },
           },
-          responseModalities: [Modality.AUDIO],
-          systemInstruction: `You are HandyPadi, the AI assistant for Ṣe Ṣe Wá, a handyman marketplace in Nigeria.`
         }
       });
 
       const audioData = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+      if (!audioData) {
+        console.warn("HandyPadi: Voice generation returned no audio data.");
+      }
       return audioData || null;
     } catch (error) {
       console.error("Voice Welcome Error:", error);
@@ -235,4 +250,3 @@ export const geminiService = {
     }
   }
 };
-;
