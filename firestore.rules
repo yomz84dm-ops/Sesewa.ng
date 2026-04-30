@@ -64,7 +64,7 @@ service cloud.firestore {
 
     match /handymen/{handymanId} {
       // FIX: Allow public read to solve "Missing or insufficient permissions" in feed and connection test
-      allow read: if true; 
+      allow get, list: if true;
       
       // Ensure create matches the schema used in your frontend
       allow create: if isSignedIn() && incoming().userId == request.auth.uid;

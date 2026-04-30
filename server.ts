@@ -1,19 +1,29 @@
+import dotenv from "dotenv";
+dotenv.config(); // Must be first to load process.env
+
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import axios, { AxiosError } from "axios";
-import dotenv from "dotenv";
-import { onRequest } from "firebase-functions/v2/https";
 import path from "path";
 import crypto from "crypto";
 import * as admin from "firebase-admin";
-
-dotenv.config();
+import { onRequest } from "firebase-functions/v2/https";
 
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
+
+// Helper to validate Paystack config and return the secret key
+const getPaystackSecret = (res: Response): string | null => {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret) {
+    res.status(500).json({ error: "Paystack secret key is not configured" });
+    return null;
+  }
+  return secret;
+};
 
 // This function creates the Express app without starting the server.
 export async function createApi() {
@@ -50,21 +60,11 @@ export async function createApi() {
     res.status(200).json({ status: "ok", secret_detected: isSecretLoaded, timestamp: new Date().toISOString() });
   });
 
-  // Root POST handler and auth catch-all for blocking functions
-  // Added a check to ensure we don't interfere with the actual API sub-routes
+  // Root POST handler (e.g. for Firebase Auth blocking functions)
   app.post("/", (req, res, next) => {
     if (req.path !== '/') return next();
     res.status(200).json({ message: "Root POST endpoint active" }); 
   });
-
-  // Helper to validate Paystack config
-  const validatePaystackConfig = (res: Response) => {
-    if (!process.env.PAYSTACK_SECRET_KEY) {
-      res.status(500).json({ error: "Paystack secret key is not configured" });
-      return false;
-    }
-    return true;
-  };
 
   // Paystack Integration
   app.post("/api/paystack/initialize", async (req: Request, res: Response) => {
@@ -121,7 +121,7 @@ export async function createApi() {
       const windowMs = 15 * 60 * 1000; // 15 minute window
       const maxAttempts = 5;
 
-      const attemptRef = admin.firestore().collection("paymentAttempts").doc(limitKey);
+      const attemptRef = admin.firestore().collection("paymentAttempts").doc(String(limitKey));
       const attemptDoc = await attemptRef.get();
       const timestamps: number[] = attemptDoc.exists ? (attemptDoc.data()?.timestamps || []) : [];
       
@@ -134,7 +134,8 @@ export async function createApi() {
         });
       }
       
-      if (!validatePaystackConfig(res)) return;
+      const secret = getPaystackSecret(res);
+      if (!secret) return;
 
       const response = await axios.post(
         `${PAYSTACK_BASE_URL}/transaction/initialize`,
@@ -147,7 +148,7 @@ export async function createApi() {
         },
         {
           headers: {
-            Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+            Authorization: `Bearer ${secret}`,
             "Content-Type": "application/json"
           },
           timeout: 10000
@@ -232,12 +233,13 @@ export async function createApi() {
         return res.status(400).json({ error: "Reference is required" });
       }
 
-      if (!validatePaystackConfig(res)) return;
+      const secret = getPaystackSecret(res);
+      if (!secret) return;
 
       const response = await axios.get(
         `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
         {
-          headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}` },
+          headers: { Authorization: `Bearer ${secret}` },
           timeout: 10000
         }
       );
