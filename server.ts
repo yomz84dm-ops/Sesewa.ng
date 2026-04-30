@@ -14,15 +14,18 @@ if (admin.apps.length === 0) {
 }
 
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
+/** Helper to get secret key, ensuring we always pull the latest env value */
+const getPaystackSecret = () => process.env.PAYSTACK_SECRET_KEY || "";
 
-// Helper to validate Paystack config and return the secret key
-const getPaystackSecret = (res: Response): string | null => {
-  const secret = process.env.PAYSTACK_SECRET_KEY;
+/**
+ * Validates that the Paystack secret key is configured.
+ */
+const paystackAuthMiddleware = (_req: Request, res: Response, next: NextFunction) => {
+  const secret = getPaystackSecret();
   if (!secret) {
-    res.status(500).json({ error: "Paystack secret key is not configured" });
-    return null;
+    return res.status(500).json({ error: "Paystack secret key not configured" });
   }
-  return secret;
+  next();
 };
 
 // This function creates the Express app without starting the server.
@@ -59,6 +62,9 @@ export async function createApi() {
     }
     res.status(200).json({ status: "ok", secret_detected: isSecretLoaded, timestamp: new Date().toISOString() });
   });
+
+  // Protect all Paystack routes with configuration validation
+  app.use("/api/paystack", paystackAuthMiddleware);
 
   // Root POST handler (e.g. for Firebase Auth blocking functions)
   app.post("/", (req, res, next) => {
@@ -134,9 +140,7 @@ export async function createApi() {
         });
       }
       
-      const secret = getPaystackSecret(res);
-      if (!secret) return;
-
+      const secret = getPaystackSecret();
       const response = await axios.post(
         `${PAYSTACK_BASE_URL}/transaction/initialize`,
         {
@@ -213,7 +217,7 @@ export async function createApi() {
           const userRef = admin.firestore().collection("users").doc(userId);
           await admin.firestore().runTransaction(async (t) => {
             const doc = await t.get(userRef);
-            const currentCredits = doc.data()?.credits || 0;
+            const currentCredits = doc.exists ? (doc.data()?.credits || 0) : 0;
             t.update(userRef, { credits: currentCredits + Number(creditsToAdd) });
           });
           console.log(`[WEBHOOK] Successfully added ${creditsToAdd} credits to user ${userId}`);
@@ -232,10 +236,7 @@ export async function createApi() {
       if (!reference) {
         return res.status(400).json({ error: "Reference is required" });
       }
-
-      const secret = getPaystackSecret(res);
-      if (!secret) return;
-
+      const secret = getPaystackSecret();
       const response = await axios.get(
         `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
         {
