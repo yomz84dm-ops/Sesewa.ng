@@ -4,13 +4,13 @@ service cloud.firestore {
     
     // --- Helpers ---
     function isSignedIn() { return request.auth != null; }
-    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isVerified() { return isSignedIn(); }
     function incom() { return request.resource.data; }
     function exist() { return resource.data; }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
     function isAdmin() { 
       return isVerified() && (
-        request.auth.token.email == 'yomz84.dm@gmail.com' || 
+        ('email' in request.auth.token && request.auth.token.email == 'yomz84.dm@gmail.com') || 
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
@@ -23,12 +23,11 @@ service cloud.firestore {
       function isValidHandyman(data) {
         return data.keys().hasAll(['id', 'name', 'category', 'userId']) &&
                data.id is string && data.id.size() <= 128 &&
-               data.name is string && data.name.size() <= 100 &&
-               data.userId == request.auth.uid;
+               data.name is string && data.name.size() <= 100;
       }
-      allow read, list: if true;
+      allow read: if true;
       allow create: if isVerified() && isValidId(handymanId) && isValidHandyman(incom()) && 
-                      (incom().verified == false || isAdmin());
+                      (incom().verified == false || isAdmin()) && incom().userId == request.auth.uid;
       allow update: if isVerified() && 
                       (isAdmin() || (isOwner(exist().userId) && 
                        incom().diff(exist()).affectedKeys().hasOnly(['description', 'phone', 'whatsapp', 'isOnline', 'availability', 'profileImage', 'portfolio', 'location', 'lat', 'lng'])));
@@ -40,9 +39,10 @@ service cloud.firestore {
       function isValidUser(data) {
         return data.uid == userId && (data.email is string || !('email' in data));
       }
-      allow read, list: if isVerified() && (isOwner(userId) || isAdmin());
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
       allow create: if isVerified() && isOwner(userId) && isValidUser(incom()) && (incom().role == 'user' || isAdmin());
-      allow update: if isVerified() && (isAdmin() || (isOwner(userId) && incom().diff(exist()).affectedKeys().hasOnly(['name', 'photoURL', 'phone', 'lat', 'lng'])));
+      allow update: if isVerified() && (isAdmin() || (isOwner(userId) && incom().diff(exist()).affectedKeys().hasOnly(['name', 'photoURL', 'phone', 'lat', 'lng', 'lastLocationUpdate', 'role', 'plan', 'credits', 'isVerifiedPending', 'idDocumentUrl'])));
     }
 
     // 3. Job Requests (Relational access)
@@ -50,7 +50,7 @@ service cloud.firestore {
       function isValidRequest(data) {
         return data.keys().hasAll(['id', 'proId', 'userUid']);
       }
-      allow read, list: if isVerified() && (isOwner(exist().userUid) || isOwner(exist().proUserId) || isAdmin());
+      allow read, list: if isSignedIn() && (isOwner(exist().userUid) || isOwner(exist().proUserId) || isAdmin());
       allow create: if isVerified() && isValidRequest(incom()) && isValidId(requestId) && incom().userUid == request.auth.uid;
       allow update: if isVerified() && (
         isAdmin() || 
@@ -61,12 +61,12 @@ service cloud.firestore {
 
     // 4. Chats & Messages
     match /chats/{chatId} {
-      allow read, list: if isVerified() && (request.auth.uid in exist().participants || isAdmin());
+      allow read, list: if isSignedIn() && (request.auth.uid in exist().participants || isAdmin());
       allow create: if isVerified() && request.auth.uid in incom().participants;
       allow update: if isVerified() && (request.auth.uid in exist().participants && incom().diff(exist()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt', 'updatedAt']));
       
       match /messages/{messageId} {
-        allow read, list: if isVerified() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
+        allow read, list: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
         allow create: if isVerified() && 
                        request.auth.uid == incom().senderId && 
                        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
@@ -75,14 +75,14 @@ service cloud.firestore {
 
     // 5. Notifications
     match /notifications/{id} {
-      allow read, list: if isVerified() && (isOwner(exist().userId) || isAdmin());
+      allow read, list: if isSignedIn() && (isOwner(exist().userId) || isAdmin());
       allow update: if isVerified() && isOwner(exist().userId) && incom().diff(exist()).affectedKeys().hasOnly(['read']);
       allow delete: if isVerified() && isOwner(exist().userId);
     }
 
     // 6. Disputes
     match /disputes/{id} {
-        allow read, list: if isVerified() && (isOwner(exist().raisedBy) || isAdmin());
+        allow read, list: if isSignedIn() && (isOwner(exist().raisedBy) || isAdmin());
       allow create: if isVerified() && isOwner(incom().raisedBy);
     }
 
@@ -93,9 +93,8 @@ service cloud.firestore {
     }
 
     // 8. Test connection
-    match /test/connection {
+    match /test/{docId} {
       allow read: if true;
-      allow write: if true;
     }
 
     // 9. Default deny

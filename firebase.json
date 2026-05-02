@@ -15,11 +15,11 @@
   },
   "firestore": [
     {
-      "database": "ai-studio-60842af9-dc8f-47e0-9c8d-566745e1fa58",
+      "database": "(default)",
       "rules": "firestore.rules"
     },
     {
-      "database": "(default)",
+      "database": "ai-studio-60842af9-dc8f-47e0-9c8d-566745e1fa58",
       "rules": "firestore.rules"
     }
   ]

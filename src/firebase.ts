@@ -15,9 +15,7 @@ export const auth = getAuth(app);
 export const storage = getStorage(app);
 
 // Initialize Firestore
-const dbId = firebaseConfig.firestoreDatabaseId;
-console.log(`[FIREBASE] Connecting to database: ${dbId}`);
-export const db = getFirestore(app, dbId);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Error Handling for Firestore Operations
 export enum OperationType {

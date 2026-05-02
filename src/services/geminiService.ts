@@ -229,7 +229,6 @@ export const geminiService = {
         model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: `Say cheerfully: ${translatedText}` }] }],
         config: {
-          systemInstruction: `You are HandyPadi, the AI assistant for Ṣe Ṣe Wá. You generate clear, warm, and professional Nigerian-accented English or localized speech.`,
           responseModalities: ['AUDIO'],
           speechConfig: {
             voiceConfig: {

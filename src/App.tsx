@@ -2002,10 +2002,16 @@ export default function App() {
               setCurrentUser(newUser);
             }
           } catch (err) {
-            handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+            console.error("User doc auth processing error:", err);
+            try {
+              handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+            } catch(e) {}
           }
         }, (error) => {
-          handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+          console.error("User doc error:", error);
+          try {
+            handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+          } catch(e) {}
         });
 
         // Reset view to home page and all filters upon login
@@ -2089,7 +2095,10 @@ export default function App() {
       const pending = snapshot.docs.map(doc => doc.data() as AppUser);
       setPendingVerifications(pending);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'users');
+      console.error("Users feed error:", error);
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'users');
+      } catch (e) {}
     });
 
     return () => unsubscribe();
@@ -2256,7 +2265,10 @@ export default function App() {
       }));
       setChats(chatList);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'chats');
+      console.error("Chats feed error:", error);
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'chats');
+      } catch (e) {}
     });
 
     return () => unsubscribe();
@@ -2282,7 +2294,10 @@ export default function App() {
       })) as Notification[];
       setNotifications(notificationList);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'notifications');
+      console.error("Notifications feed error:", error);
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'notifications');
+      } catch (e) {}
     });
 
     return () => unsubscribe();
@@ -2495,11 +2510,13 @@ export default function App() {
       return;
     }
 
-    const q = query(
-      collection(db, 'jobRequests'),
-      where(currentUser.role === 'handyman' ? 'proUserId' : 'userUid', '==', currentUser.uid),
-      orderBy('date', 'desc')
-    );
+    const q = currentUser.role === 'admin' 
+      ? query(collection(db, 'jobRequests'), orderBy('date', 'desc'))
+      : query(
+        collection(db, 'jobRequests'),
+        where(currentUser.role === 'handyman' ? 'proUserId' : 'userUid', '==', currentUser.uid),
+        orderBy('date', 'desc')
+      );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const requestList = snapshot.docs.map(doc => ({
@@ -2509,7 +2526,10 @@ export default function App() {
       })) as JobRequest[];
       setJobRequests(requestList);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'jobRequests');
+      console.error("Job Requests feed error:", error);
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'jobRequests');
+      } catch (e) {}
     });
 
     return () => unsubscribe();
