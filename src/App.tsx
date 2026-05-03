@@ -2149,6 +2149,15 @@ export default function App() {
 
         // 2. Handle Default Domain redirection (if current host is not configured)
         const defaultDomain = domainsList.find(d => d.isDefault);
+        const isHostOrSubdomainOf = (currentHost: string, domain: string): boolean =>
+          currentHost === domain || currentHost.endsWith(`.${domain}`);
+
+        const hostIsDevOrPreview = isHostOrSubdomainOf(host, 'localhost') || 
+                                   isHostOrSubdomainOf(host, 'run.app') || 
+                                   isHostOrSubdomainOf(host, 'googleusercontent.com') ||
+                                   isHostOrSubdomainOf(host, 'firebaseapp.com') ||
+                                   isHostOrSubdomainOf(host, 'web.app') ||
+                                   host === '127.0.0.1';
         const hostIsDevOrPreview = host === 'localhost' ||
                                    host === '127.0.0.1' ||
                                    host === 'run.app' || host.endsWith('.run.app') ||
