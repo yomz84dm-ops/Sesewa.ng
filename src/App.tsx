@@ -2149,12 +2149,12 @@ export default function App() {
 
         // 2. Handle Default Domain redirection (if current host is not configured)
         const defaultDomain = domainsList.find(d => d.isDefault);
-        const hostIsDevOrPreview = host.includes('localhost') || 
-                                   host.includes('.run.app') || 
-                                   host.includes('.googleusercontent.com') ||
-                                   host.includes('.firebaseapp.com') ||
-                                   host.includes('.web.app') ||
-                                   host.includes('127.0.0.1');
+        const hostIsDevOrPreview = host === 'localhost' ||
+                                   host === '127.0.0.1' ||
+                                   host === 'run.app' || host.endsWith('.run.app') ||
+                                   host === 'googleusercontent.com' || host.endsWith('.googleusercontent.com') ||
+                                   host === 'firebaseapp.com' || host.endsWith('.firebaseapp.com') ||
+                                   host === 'web.app' || host.endsWith('.web.app');
 
         if (defaultDomain && defaultDomain.name.toLowerCase() !== host && !hostIsDevOrPreview) {
           const matchingDomain = domainsList.find(d => d.name.toLowerCase() === host);
