@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
 
 dotenv.config();
 
@@ -11,6 +12,14 @@ export async function createApi() {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cors());
+
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per window
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use(limiter);
 
   // Request logger for debugging
   app.use((req, res, next) => {
