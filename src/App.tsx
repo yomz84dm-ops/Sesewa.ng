@@ -2754,11 +2754,29 @@ export default function App() {
     }
   };
 
+  const getUnbiasedRandomInt = (maxExclusive: number): number => {
+    if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
+      throw new Error('maxExclusive must be a positive integer');
+    }
+
+    const maxUint32 = 0x100000000;
+    const limit = maxUint32 - (maxUint32 % maxExclusive);
+    const randomArray = new Uint32Array(1);
+    let value: number;
+
+    do {
+      globalThis.crypto.getRandomValues(randomArray);
+      value = randomArray[0];
+    } while (value >= limit);
+
+    return value % maxExclusive;
+  };
+
   const handleAddReview = (proId: string, rating: number, comment: string) => {
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + Math.floor(Math.random() * 1000),
+      userName: 'User ' + getUnbiasedRandomInt(1000),
       rating,
       comment,
       date: new Date().toLocaleDateString()
