@@ -132,8 +132,14 @@ if (!isFunctionEnv && process.env.NODE_ENV !== "test") {
       // In production (Cloud Run), we serve static files from /dist
       const path = await import("path");
       const distPath = path.join(process.cwd(), 'dist');
+      const spaFallbackLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 300, // limit repeated fallback hits per IP
+        standardHeaders: true,
+        legacyHeaders: false,
+      });
       app.use(express.static(distPath));
-      app.get('*', (req, res) => {
+      app.get('*', spaFallbackLimiter, (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }
