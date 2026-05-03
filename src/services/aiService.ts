@@ -1,5 +1,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
+const getAPIKey = () => {
+  return process.env.GEMINI_API_KEY || "";
+};
+
+const ai = new GoogleGenAI({ 
+  apiKey: getAPIKey()
+});
+
 export interface PriceEstimation {
   minPrice: number;
   maxPrice: number;
@@ -10,28 +18,14 @@ export interface PriceEstimation {
   marketNotes: string;
 }
 
-const getAi = () => {
-  const key = process.env.GEMINI_API_KEY || "";
-  if (!key || key.trim().length < 5) {
-    console.warn("AI Service: GEMINI_API_KEY is missing or invalid.");
-    return null;
-  }
-  return new GoogleGenAI({ apiKey: key.trim() });
-};
-
-const PREVIEW_TEXT_MODEL = "gemini-3-flash-preview";
-
 export async function getPriceEstimation(
   task: string,
   location: string,
-  country: string = "Nigeria",
-  currency: string = "NGN",
+  country: string,
+  currency: string,
   language: string = "English"
 ): Promise<PriceEstimation> {
   try {
-    const ai = getAi();
-    if (!ai) throw new Error("AI Service not configured.");
-
     const prompt = `
       You are the Global Ṣe Ṣe Wá Pricing Expert for the Pan-African Handyman Marketplace.
       Analyze the following task: "${task}" in the location: "${location}, ${country}".
@@ -41,9 +35,10 @@ export async function getPriceEstimation(
     `;
 
     const response = await ai.models.generateContent({
-      model: PREVIEW_TEXT_MODEL,
-      contents: prompt,
+      model: "gemini-3-flash-preview",
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
+        systemInstruction: "You are the Global Ṣe Ṣe Wá Pricing Expert. Provide fair and accurate market price estimates for handyman tasks in Nigeria.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -61,10 +56,8 @@ export async function getPriceEstimation(
       }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("AI returned empty response");
-    return JSON.parse(text);
-  } catch (error) {
+    return JSON.parse(response.text || "{}");
+  } catch (error: any) {
     console.error("Price Estimation Error:", error);
     throw error;
   }

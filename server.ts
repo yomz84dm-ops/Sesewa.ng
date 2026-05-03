@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
-import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 dotenv.config();
 
@@ -17,8 +16,6 @@ export async function createApi() {
   app.use((req, res, next) => {
     if (req.method === 'POST') {
       console.log(`[DEBUG] POST ${req.path}`);
-      console.log(`[DEBUG] Headers: ${JSON.stringify(req.headers)}`);
-      console.log(`[DEBUG] Body: ${JSON.stringify(req.body)}`);
     }
     next();
   });
@@ -28,14 +25,7 @@ export async function createApi() {
     res.json({ status: "ok" });
   });
 
-  // Root POST handler and auth catch-all for blocking functions
-  // This must be BEFORE other specific POST routes if we want to catch root
-  app.post("/", (req, res) => {
-    console.log(`[DEBUG] Root POST caught - potential blocking function`);
-    res.status(200).json({}); 
-  });
-
-  // Paystack Integration
+  // PAYSTACK Integration
   const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
 
   app.post("/api/paystack/initialize", async (req, res) => {
@@ -91,12 +81,6 @@ export async function createApi() {
       console.error("Paystack verification error:", error.response?.data || error.message);
       res.status(500).json({ error: "Failed to verify payment" });
     }
-  });
-
-  // General catch-all for any other POST requests to handle potential blocking functions on any path
-  app.post("*", (req, res) => {
-    console.log(`[DEBUG] Unhandled POST to ${req.path} - potential blocking function caught`);
-    res.status(200).json({});
   });
 
   return app;

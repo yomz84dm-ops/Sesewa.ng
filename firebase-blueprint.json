@@ -1,30 +1,8 @@
 {
   "entities": {
-    "User": {
-      "title": "User",
-      "description": "User profile information",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string", "description": "Unique identifier for the user" },
-        "email": { "type": "string", "format": "email", "description": "User's email address" },
-        "name": { "type": "string", "description": "User's full name" },
-        "role": { "type": "string", "enum": ["admin", "user", "handyman"], "description": "User's role in the application" },
-        "photoURL": { "type": "string", "description": "URL to the user's profile picture" },
-        "phone": { "type": "string", "description": "User's phone number" },
-        "plan": { "type": "string", "enum": ["basic", "pro", "member"], "description": "User's subscription plan" },
-        "credits": { "type": "number", "description": "User's lead credits" },
-        "isVerifiedPending": { "type": "boolean", "description": "Whether verification is pending" },
-        "verified": { "type": "boolean", "description": "Whether the user is verified" },
-        "idDocumentUrl": { "type": "string", "description": "URL to the uploaded ID document" },
-        "createdAt": { "type": "string", "format": "date-time", "description": "When the user account was created" },
-        "lat": { "type": "number" },
-        "lng": { "type": "number" }
-      },
-      "required": ["uid", "email", "role"]
-    },
     "Handyman": {
       "title": "Handyman",
-      "description": "Professional service provider profile",
+      "description": "Professional handyman profile",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -50,72 +28,51 @@
         "plan": { "type": "string" },
         "ninVerified": { "type": "boolean" }
       },
-      "required": ["id", "name", "category", "location", "rating"]
+      "required": ["id", "name", "category", "userId"]
+    },
+    "AppUser": {
+      "title": "User",
+      "description": "Application user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "handyman", "admin"] },
+        "photoURL": { "type": "string" },
+        "phone": { "type": "string" },
+        "plan": { "type": "string", "enum": ["basic", "pro", "member"] },
+        "credits": { "type": "number" },
+        "isVerifiedPending": { "type": "boolean" },
+        "verified": { "type": "boolean" },
+        "idDocumentUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" }
+      },
+      "required": ["uid", "email"]
     },
     "JobRequest": {
-      "title": "JobRequest",
-      "description": "A request for a service from a user to a pro",
+      "title": "Job Request",
+      "description": "A job request sent from a user to a handyman",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "proId": { "type": "string" },
-        "proUserId": { "type": "string", "description": "UID of the professional" },
+        "proUserId": { "type": "string" },
         "proName": { "type": "string" },
         "userUid": { "type": "string" },
         "userName": { "type": "string" },
         "userPhone": { "type": "string" },
         "jobDescription": { "type": "string" },
         "status": { "type": "string", "enum": ["pending", "responded", "on-the-way", "completed", "cancelled"] },
-        "paymentStatus": { "type": "string" },
+        "paymentStatus": { "type": "string", "enum": ["none", "pending", "escrowed", "released", "refunded", "disputed"] },
         "amount": { "type": "number" },
         "paystackReference": { "type": "string" },
         "date": { "type": "string" },
         "unlockedBy": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["id", "proId", "userUid", "status"]
-    },
-    "Chat": {
-      "title": "Chat",
-      "description": "A conversation between two users",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "participants": { "type": "array", "items": { "type": "string" } },
-        "lastMessage": { "type": "string" },
-        "lastMessageAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" },
-        "otherParticipantName": { "type": "string" }
-      },
-      "required": ["id", "participants", "updatedAt"]
-    },
-    "Message": {
-      "title": "Message",
-      "description": "A single message in a chat",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "chatId": { "type": "string" },
-        "senderId": { "type": "string" },
-        "text": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "chatId", "senderId", "text", "createdAt"]
-    },
-    "Notification": {
-      "title": "Notification",
-      "description": "A system or user notification",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "type": { "type": "string" },
-        "relatedId": { "type": "string" },
-        "read": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "userId", "title", "message", "read", "createdAt"]
+      "required": ["id", "proId", "userUid"]
     },
     "Dispute": {
       "title": "Dispute",
@@ -130,55 +87,101 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "resolvedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "jobRequestId", "raisedBy", "status", "createdAt"]
+      "required": ["id", "jobRequestId", "raisedBy"]
     },
     "ManagedDomain": {
-      "title": "ManagedDomain",
-      "description": "A domain managed by the platform",
+      "title": "Managed Domain",
+      "description": "Domain configuration for the platform",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string", "description": "Domain name, e.g., sesewa.ng" },
-        "mode": { "type": "string", "enum": ["serve", "redirect"], "description": "Whether to serve traffic or redirect" },
-        "target": { "type": "string", "description": "Redirect destination if mode is redirect" },
-        "isDefault": { "type": "boolean", "description": "Whether this is the primary/default domain" },
+        "name": { "type": "string" },
+        "mode": { "type": "string", "enum": ["serve", "redirect"] },
+        "target": { "type": "string" },
+        "isDefault": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "name", "mode"]
+      "required": ["id", "name"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["message", "job_status", "quote", "system"] },
+        "relatedId": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "title", "message"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "One-on-one chat conversation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "participants"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single message within a chat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "chatId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "chatId", "senderId", "text"]
     }
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": "User",
-      "description": "User profile documents"
-    },
-    "/handymen/{handymanId}": {
+    "handymen/{handymanId}": {
       "schema": "Handyman",
-      "description": "Professional service provider profiles"
+      "description": "Public directory of handymen"
     },
-    "/jobRequests/{requestId}": {
+    "users/{userId}": {
+      "schema": "AppUser",
+      "description": "User account data"
+    },
+    "jobRequests/{requestId}": {
       "schema": "JobRequest",
-      "description": "Service requests"
+      "description": "Lead and job management"
     },
-    "/chats/{chatId}": {
-      "schema": "Chat",
-      "description": "Chat sessions"
-    },
-    "/chats/{chatId}/messages/{messageId}": {
-      "schema": "Message",
-      "description": "Messages within a chat"
-    },
-    "/notifications/{notificationId}": {
-      "schema": "Notification",
-      "description": "User notifications"
-    },
-    "/disputes/{disputeId}": {
+    "disputes/{disputeId}": {
       "schema": "Dispute",
-      "description": "Disputes for job requests"
+      "description": "Dispute handling"
     },
-    "/managedDomains/{domainId}": {
+    "managedDomains/{domainId}": {
       "schema": "ManagedDomain",
-      "description": "Domains managed for country-specific traffic"
+      "description": "Domain routing"
+    },
+    "notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User alerts"
+    },
+    "chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Conversations"
+    },
+    "chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Individual messages"
+    },
+    "test/connection": {
+      "schema": { "type": "object", "properties": {} },
+      "description": "Health check document"
     }
   }
 }
