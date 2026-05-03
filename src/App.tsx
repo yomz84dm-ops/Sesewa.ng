@@ -70,7 +70,8 @@ import {
   X,
   Tag,
   Loader2,
-  Volume2
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -1284,9 +1285,33 @@ const SafetyTips = ({ lang }: { lang: string }) => {
 const VoiceWelcome = ({ lang }: { lang: string }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasInteracted, setHasInteracted] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioBufferRef = useRef<AudioBuffer | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+
+  // Initialize context on first interaction
+  useEffect(() => {
+    const handleInteraction = () => {
+      if (!hasInteracted) {
+        setHasInteracted(true);
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
+            sampleRate: 24000
+          });
+        }
+        if (audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume();
+        }
+      }
+    };
+    window.addEventListener('click', handleInteraction, { once: true });
+    window.addEventListener('touchstart', handleInteraction, { once: true });
+    return () => {
+      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('touchstart', handleInteraction);
+    };
+  }, [hasInteracted]);
 
   const fetchAudio = async () => {
     try {
@@ -1297,8 +1322,6 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
         setIsLoading(false);
         return;
       }
-
-      console.log(`Received audio data, length: ${base64Audio.length}`);
 
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
@@ -1316,22 +1339,12 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       }
 
       // Convert Int16 PCM to Float32
-      // Ensure we have an even number of bytes for Int16
       const pcmLen = Math.floor(len / 2);
       const int16Data = new Int16Array(bytes.buffer, 0, pcmLen);
       const float32Data = new Float32Array(pcmLen);
       
-      let hasData = false;
       for (let i = 0; i < pcmLen; i++) {
-        const val = int16Data[i] / 32768.0;
-        float32Data[i] = val;
-        if (Math.abs(val) > 0.01) hasData = true;
-      }
-
-      if (!hasData) {
-        console.warn("Decoded audio buffer seems to be silent (all samples near zero)");
-      } else {
-        console.log("Audio buffer contains non-silent data");
+        float32Data[i] = int16Data[i] / 32768.0;
       }
 
       // Create AudioBuffer
@@ -1340,12 +1353,10 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       audioBufferRef.current = audioBuffer;
       setIsLoading(false);
       
-      // Auto-play attempt
-      setTimeout(() => {
-        if (audioBufferRef.current) {
-          playBuffer(audioBufferRef.current);
-        }
-      }, 300);
+      // Auto-play if we have interaction
+      if (hasInteracted && audioBufferRef.current) {
+        playBuffer(audioBufferRef.current);
+      }
     } catch (e) {
       console.error("Fetch audio error:", e);
       setIsLoading(false);
@@ -1365,6 +1376,10 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
       console.warn("Could not resume AudioContext:", err);
     }
 
+    if (sourceNodeRef.current) {
+      try { sourceNodeRef.current.stop(); } catch(e) {}
+    }
+
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.connect(ctx.destination);
@@ -1377,11 +1392,7 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
   const handlePlay = async () => {
     if (isPlaying) {
       if (sourceNodeRef.current) {
-        try {
-          sourceNodeRef.current.stop();
-        } catch (e) {
-          console.warn("Error stopping audio playback:", e);
-        }
+        try { sourceNodeRef.current.stop(); } catch (e) {}
       }
       setIsPlaying(false);
       return;
@@ -1390,46 +1401,76 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
     if (!audioBufferRef.current) {
       setIsLoading(true);
       await fetchAudio();
-    }
-    
-    if (audioBufferRef.current) {
+    } else {
       playBuffer(audioBufferRef.current);
     }
   };
 
   useEffect(() => {
-    audioBufferRef.current = null; // Clear old buffer when language changes
+    // Reset buffer on language change and fetch in background
+    audioBufferRef.current = null;
     setIsLoading(true);
     fetchAudio();
+    
     return () => {
       try {
         if (sourceNodeRef.current) {
           sourceNodeRef.current.stop();
           sourceNodeRef.current = null;
         }
-        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-          audioContextRef.current.close().catch(err => console.error("Error closing AudioContext:", err));
-          audioContextRef.current = null;
-        }
-      } catch (err) {
-        console.warn("Audio cleanup error:", err);
-      }
+      } catch (err) { }
     };
   }, [lang]);
 
   return (
-    <div className="flex items-center gap-1 sm:gap-3">
-      {isLoading ? (
-        <div className="flex items-center gap-1 sm:gap-2 px-2 py-1 bg-blue-50 text-blue-600 rounded-full animate-pulse border border-blue-100">
-          <Loader2 className="animate-spin" size={14} />
-          <span className="text-[10px] sm:text-xs font-semibold">HandyPadi is preparing greeting...</span>
-        </div>
-      ) : isPlaying ? (
-        <div className="flex items-center gap-1 sm:gap-2 px-2 py-1 bg-green-50 text-green-600 rounded-full border border-green-100">
-          <Volume2 className="animate-bounce" size={14} />
-          <span className="text-[10px] sm:text-xs font-semibold">HandyPadi greeting...</span>
-        </div>
-      ) : null}
+    <div className="flex items-center">
+      {isPlaying ? (
+        <button 
+          onClick={handlePlay}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 text-red-600 rounded-full border border-red-100 hover:bg-red-100 transition-all active:scale-95 group"
+        >
+          <div className="flex items-end gap-0.5 h-3">
+            {[1, 2, 3, 4].map(i => (
+              <motion.div 
+                key={i} 
+                animate={{ height: [4, 12, 4] }}
+                transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.1 }}
+                className="w-1 bg-red-500 rounded-full" 
+              />
+            ))}
+          </div>
+          <span className="text-[9px] font-black uppercase tracking-widest">Stop</span>
+        </button>
+      ) : (
+        <motion.button 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          whileHover={{ scale: 1.05, y: -1 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={handlePlay}
+          className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full transition-all group overflow-hidden ${
+            isLoading 
+              ? 'bg-slate-50 text-slate-400 border border-slate-100 cursor-wait' 
+              : 'bg-blue-600 text-white hover:shadow-lg hover:shadow-blue-500/30'
+          }`}
+          id="listen-welcome-btn"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 size={14} className="animate-spin text-blue-500" />
+              <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Preparing...</span>
+            </>
+          ) : (
+            <>
+              <Volume2 size={16} className="shrink-0" />
+              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
+                {lang === 'Pidgin' ? 'Padi Greet Me' : 'Hi Padi'}
+              </span>
+              <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white" />
+            </>
+          )}
+        </motion.button>
+      )}
     </div>
   );
 };
@@ -1717,8 +1758,24 @@ export default function App() {
   const [jobDescriptionInput, setJobDescriptionInput] = useState('');
   const [currentLanguage, setCurrentLanguage] = useState('English');
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const [hasInteractedForAudio, setHasInteractedForAudio] = useState(false);
   const languageMenuRef = useRef<HTMLDivElement>(null);
   const mobileLanguageMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleFirstInteraction = () => {
+      if (!hasInteractedForAudio) {
+        console.log("First user interaction detected, enabling audio context...");
+        setHasInteractedForAudio(true);
+      }
+    };
+    window.addEventListener('click', handleFirstInteraction, { once: true });
+    window.addEventListener('touchstart', handleFirstInteraction, { once: true });
+    return () => {
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
+    };
+  }, [hasInteractedForAudio]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -1877,7 +1934,9 @@ export default function App() {
     async function testConnection() {
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
+        console.log("Firestore connection test: SUCCESS");
       } catch (error) {
+        console.error("Firestore connection test: FAILED", error);
         if (error instanceof Error && error.message.includes('the client is offline')) {
           console.error("Please check your Firebase configuration. The client is offline.");
         }
@@ -1886,7 +1945,8 @@ export default function App() {
     testConnection();
 
     // Fetch all handymen from Firestore
-    const handymenQuery = query(collection(db, 'handymen'), orderBy('rating', 'desc'));
+    const handymenQuery = collection(db, 'handymen');
+    
     const unsubscribeHandymen = onSnapshot(handymenQuery, (snapshot) => {
       const dbHandymen = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -1896,7 +1956,13 @@ export default function App() {
       setHandymen(dbHandymen);
     }, (error) => {
       console.error("Handymen feed error:", error);
-      toast.error("Low data or connection issue. Some features may be limited.");
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'handymen');
+      } catch (e) {
+        // handleFirestoreError throws, but we want to just log it and show toast
+        console.error("Handymen feed error details:", e);
+      }
+      toast.error(t(currentLanguage, "Low data or connection issue. Some features may be limited."));
     });
 
     let unsubscribeUserDoc: (() => void) | null = null;
@@ -1936,10 +2002,16 @@ export default function App() {
               setCurrentUser(newUser);
             }
           } catch (err) {
-            handleLoggedError(err, OperationType.GET, `users/${user.uid}`);
+            console.error("User doc auth processing error:", err);
+            try {
+              handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+            } catch(e) {}
           }
         }, (error) => {
-          handleLoggedError(error, OperationType.GET, `users/${user.uid}`);
+          console.error("User doc error:", error);
+          try {
+            handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+          } catch(e) {}
         });
 
         // Reset view to home page and all filters upon login
@@ -1970,14 +2042,16 @@ export default function App() {
 
   // Handyman Seeding logic moved out of onSnapshot for performance
   useEffect(() => {
-    if (handymen.length > 0 && currentUser?.email === 'yomz84.dm@gmail.com') {
+    if (currentUser?.email === 'yomz84.dm@gmail.com') {
       const existingIds = new Set(handymen.map(h => h.id));
       const missingPros = INITIAL_HANDYMEN.filter(pro => !existingIds.has(pro.id));
       
       if (missingPros.length > 0) {
+        console.log(`Seeding ${missingPros.length} missing handymen...`);
         missingPros.forEach(async (pro) => {
           try {
-            await setDoc(doc(db, 'handymen', pro.id), pro);
+            const proWithUserId = { ...pro, userId: currentUser.uid };
+            await setDoc(doc(db, 'handymen', pro.id), proWithUserId);
           } catch (e) {
             console.error(`Failed to seed pro ${pro.id}:`, e);
           }
@@ -2021,7 +2095,10 @@ export default function App() {
       const pending = snapshot.docs.map(doc => doc.data() as AppUser);
       setPendingVerifications(pending);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'users');
+      console.error("Users feed error:", error);
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'users');
+      } catch (e) {}
     });
 
     return () => unsubscribe();
@@ -2188,7 +2265,10 @@ export default function App() {
       }));
       setChats(chatList);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'chats');
+      console.error("Chats feed error:", error);
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'chats');
+      } catch (e) {}
     });
 
     return () => unsubscribe();
@@ -2214,7 +2294,10 @@ export default function App() {
       })) as Notification[];
       setNotifications(notificationList);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'notifications');
+      console.error("Notifications feed error:", error);
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'notifications');
+      } catch (e) {}
     });
 
     return () => unsubscribe();
@@ -2246,35 +2329,69 @@ export default function App() {
     }
   };
 
+  const getAuthErrorMessage = (error: any) => {
+    console.error('Unified Auth Error detail:', {
+      code: error.code,
+      message: error.message,
+      customData: error.customData,
+      name: error.name,
+      stack: error.stack
+    });
+
+    switch (error.code) {
+      case 'auth/network-request-failed':
+        return t(currentLanguage, 'Connection issue detected. Please check your internet or data connection and try again.');
+      case 'auth/internal-error':
+        return t(currentLanguage, 'There was a problem signing you in due to a temporary connection drop. Please wait a moment and try again.');
+      case 'auth/timeout':
+        return t(currentLanguage, 'The login request timed out. This usually happens on slow data connections. Please try moving to a better signal area.');
+      case 'auth/operation-not-allowed':
+        return "Sign-in method is currently disabled. Please contact the administrator.";
+      case 'auth/popup-blocked':
+        return "Login popup was blocked by your browser. Please allow popups for this site.";
+      case 'auth/popup-closed-by-user':
+        return null; // Don't show error for manual cancel
+      case 'auth/email-already-in-use':
+        return "An account already exists with this email address.";
+      case 'auth/weak-password':
+        return "Your password is too weak. Please use at least 6 characters.";
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-login-credentials':
+        return "Invalid email or password. Please double-check your credentials.";
+      case 'auth/too-many-requests':
+        return "Too many failed login attempts. Your account has been temporarily disabled. Please try again later.";
+      case 'auth/user-disabled':
+        return "This account has been disabled. Please contact support.";
+      case 'auth/invalid-email':
+        return "Please enter a valid email address.";
+      case 'auth/admin-restricted-operation':
+        return "This action is restricted by system policy. Please contact your administrator.";
+      default:
+        return error.message || "An unexpected error occurred during login. Please try again in a moment.";
+    }
+  };
+
   const handleGoogleLogin = async () => {
     try {
+      setAuthError(null);
+      setAuthLoading(true);
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
       setShowAuthModal(false);
       toast.success(t(currentLanguage, 'welcomeBack'));
     } catch (error: any) {
-      if (error.code === 'auth/popup-closed-by-user') {
-        console.log('User cancelled login.');
-      } else {
-        console.error('Login Error details:', {
-          code: error.code,
-          message: error.message,
-          customData: error.customData,
-          name: error.name,
-          stack: error.stack
-        });
-        let errorMessage = error.message;
-        if (error.code === 'auth/operation-not-allowed') {
-          errorMessage = "Google sign-in is not enabled for this project.";
-        } else if (error.code === 'auth/popup-blocked') {
-          errorMessage = "Popup was blocked by your browser. Please allow popups.";
-        } else if (error.code === 'auth/admin-restricted-operation') {
-          errorMessage = "Google login is restricted. Please check your project settings.";
-        }
+      const errorMessage = getAuthErrorMessage(error);
+      if (errorMessage) {
         setAuthError(errorMessage);
-        toast.error("Login Error", { description: errorMessage });
+        toast.error(t(currentLanguage, "Login Problem"), { 
+          description: errorMessage,
+          duration: 6000 // Show longer for connection errors
+        });
       }
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -2306,26 +2423,14 @@ export default function App() {
         toast.success(t(currentLanguage, 'resetEmailSent'));
       }
     } catch (error: any) {
-      console.error('Auth Error:', error);
-      let errorMessage = error.message;
-      
-      // Map common Firebase auth errors to more user-friendly messages if needed
-      if (error.code === 'auth/operation-not-allowed') {
-        errorMessage = "Email/Password sign-in is not enabled. Please contact support.";
-      } else if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "An account already exists with this email.";
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = "Password is too weak. Please use at least 6 characters.";
-      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        errorMessage = "Invalid email or password.";
-      } else if (error.code === 'auth/admin-restricted-operation') {
-        errorMessage = "This operation is restricted. Please check your permissions.";
-      } else if (error.code === 'auth/popup-blocked') {
-        errorMessage = "Popup was blocked by your browser. Please allow popups for this site.";
+      const errorMessage = getAuthErrorMessage(error);
+      if (errorMessage) {
+        setAuthError(errorMessage);
+        toast.error(t(currentLanguage, "Authentication Problem"), { 
+          description: errorMessage,
+          duration: 6000
+        });
       }
-
-      setAuthError(errorMessage);
-      toast.error("Authentication Error", { description: errorMessage });
     } finally {
       setAuthLoading(false);
     }
@@ -2405,11 +2510,13 @@ export default function App() {
       return;
     }
 
-    const q = query(
-      collection(db, 'jobRequests'),
-      where(currentUser.role === 'handyman' ? 'proUserId' : 'userUid', '==', currentUser.uid),
-      orderBy('date', 'desc')
-    );
+    const q = currentUser.role === 'admin' 
+      ? query(collection(db, 'jobRequests'), orderBy('date', 'desc'))
+      : query(
+        collection(db, 'jobRequests'),
+        where(currentUser.role === 'handyman' ? 'proUserId' : 'userUid', '==', currentUser.uid),
+        orderBy('date', 'desc')
+      );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const requestList = snapshot.docs.map(doc => ({
@@ -2419,7 +2526,10 @@ export default function App() {
       })) as JobRequest[];
       setJobRequests(requestList);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'jobRequests');
+      console.error("Job Requests feed error:", error);
+      try {
+        handleFirestoreError(error, OperationType.LIST, 'jobRequests');
+      } catch (e) {}
     });
 
     return () => unsubscribe();
@@ -3387,7 +3497,7 @@ export default function App() {
               <Logo className="w-8 h-8 sm:w-10 sm:h-10 transition-transform group-hover:scale-110" />
               <div className="flex flex-col leading-none">
                 <span className="font-black text-sm sm:text-xl tracking-tighter text-blue-600 uppercase">Ṣe Ṣẹ Wá</span>
-                <span className="hidden sm:inline text-[8px] font-black text-slate-400 tracking-[0.2em] uppercase">Golding Limited</span>
+                <span className="hidden sm:inline text-[8px] font-black text-blue-600 tracking-[0.2em] uppercase">HandyPadi</span>
               </div>
             </div>
           </div>
@@ -5034,15 +5144,22 @@ export default function App() {
                       <button 
                         type="button"
                         onClick={handleGoogleLogin}
-                        className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
+                        disabled={authLoading}
+                        className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
-                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                        </svg>
-                        Google
+                        {authLoading ? (
+                           <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            </svg>
+                            Google
+                          </>
+                        )}
                       </button>
                     )}
 
