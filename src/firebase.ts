@@ -1,8 +1,12 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, getDocFromServer, doc } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  getDocFromServer, 
+  doc, 
+  initializeFirestore 
+} from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase
@@ -10,41 +14,8 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Initialize App Check
-// App Check is disabled to prevent "invalid-token" errors in development
-// if enforcement is active in the Firebase console.
-/* 
-if (typeof window !== 'undefined') {
-  (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-  try {
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider('6Lc3-8oqAAAAAHu-Y7_jYzS0wHn-T_J4B_mYq6G7'),
-      isTokenAutoRefreshEnabled: true
-    });
-    console.log('App Check initialized');
-  } catch (error) {
-    console.warn('App Check initialization failed:', error);
-  }
-}
-*/
-
-// Initialize Firestore with specific database if provided, otherwise default
-let firestoreDb;
-try {
-  if (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)') {
-    firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-    console.log(`Firestore initialized with named database: ${firebaseConfig.firestoreDatabaseId}`);
-  } else {
-    firestoreDb = getFirestore(app);
-    console.log('Firestore initialized with default database');
-  }
-} catch (error) {
-  console.error("Firestore initialization failed. Check your firebase-applet-config.json", error);
-  // Fallback
-  firestoreDb = getFirestore(app);
-}
-
-export const db = firestoreDb;
+// Initialize Firestore
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Error Handling for Firestore Operations
 export enum OperationType {
@@ -84,7 +55,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
       tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
         providerId: provider.providerId,
         displayName: provider.displayName,
         email: provider.email,
