@@ -303,3 +303,8 @@
 2026-05-06 11:19:39.127 [info] ExtensionService#_doActivateExtension ms-python.python, startup: false, activationEvent: 'api', root cause: ms-toolsai.jupyter
 2026-05-06 11:19:39.698 [info] ExtensionService#_doActivateExtension ms-toolsai.jupyter-renderers, startup: false, activationEvent: 'api', root cause: ms-toolsai.jupyter
 2026-05-06 11:19:49.773 [info] ExtensionService#_doActivateExtension vscode.terminal-suggest, startup: false, activationEvent: 'onTerminalShellIntegration:*'
+2026-05-06 11:45:15.955 [warning] [Decorations] CAPPING events from decorations provider vscode.git 704
+2026-05-06 11:46:11.859 [warning] [Decorations] CAPPING events from decorations provider vscode.git 708
+2026-05-06 12:28:21.348 [info] Extension host terminating: renderer disconnected for too long (2)
+2026-05-06 12:28:21.354 [info] Lock '/home/yomz84_dm/.codeoss/data/User/workspaceStorage/-502a61b0/vscode.lock': Marking the lockfile as scheduled to be released in 6000 ms.
+2026-05-06 12:28:21.656 [info] Extension host with pid 3194 exiting with code 0
