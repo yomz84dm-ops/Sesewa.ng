@@ -236,9 +236,13 @@ export async function createApi() {
       if (!reference) {
         return res.status(400).json({ error: "Reference is required" });
       }
+      if (!/^[A-Za-z0-9_-]{6,100}$/.test(reference)) {
+        return res.status(400).json({ error: "Invalid reference format" });
+      }
+      const safeReference = encodeURIComponent(reference);
       const secret = getPaystackSecret();
       const response = await axios.get(
-        `${PAYSTACK_BASE_URL}/transaction/verify/${reference}`,
+        `${PAYSTACK_BASE_URL}/transaction/verify/${safeReference}`,
         {
           headers: { Authorization: `Bearer ${secret}` },
           timeout: 10000
