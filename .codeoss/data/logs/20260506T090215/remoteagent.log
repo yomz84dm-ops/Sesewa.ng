@@ -283,3 +283,5 @@
 2026-05-06 09:03:09.701 [info] [127.0.0.1][a383cc31][ExtensionHostConnection] <3618> [reconnection-grace-time] Extension host: read VSCODE_RECONNECTION_GRACE_TIME=10800000ms (10800s)
 
 2026-05-06 09:03:10.725 [info] [127.0.0.1][c07ed03a][ExtensionHostConnection] <3356> Extension Host Process exited with code: 0, signal: null.
+2026-05-06 09:46:29.638 [info] [127.0.0.1][a383cc31][ExtensionHostConnection] The client has reconnected.
+2026-05-06 09:46:29.712 [info] [127.0.0.1][b538515d][ManagementConnection] The client has reconnected.
