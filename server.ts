@@ -58,9 +58,6 @@ export async function createApi() {
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
     const isSecretLoaded = !!secretKey;
     console.log(`[HEALTH] Secret loaded: ${isSecretLoaded}`);
-    if (secretKey) {
-      console.log(`[HEALTH] Secret length: ${secretKey.length} chars`);
-    }
     res.status(200).json({ status: "ok", secret_detected: isSecretLoaded, timestamp: new Date().toISOString() });
   });
 
