@@ -1,0 +1,130 @@
+2026-05-06 09:02:36.778 [info] [main] Log level: Info
+2026-05-06 09:02:36.778 [info] [main] Validating found git in: "git"
+2026-05-06 09:02:36.778 [info] [main] Using git "2.43.0" from "git"
+2026-05-06 09:02:36.778 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-06 09:02:36.778 [info] > git rev-parse --show-toplevel [5ms]
+2026-05-06 09:02:36.778 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [9ms]
+2026-05-06 09:02:36.778 [info] [Model][openRepository] Opened repository (path): /home/yomz84_dm
+2026-05-06 09:02:36.778 [info] [Model][openRepository] Opened repository (real path): /home/yomz84_dm
+2026-05-06 09:02:36.778 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-06 09:02:36.778 [info] > git rev-parse --show-toplevel [9ms]
+2026-05-06 09:02:36.778 [info] > git config --get commit.template [14ms]
+2026-05-06 09:02:36.778 [info] > git rev-parse --show-toplevel [13ms]
+2026-05-06 09:02:36.778 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3ms]
+2026-05-06 09:02:36.794 [info] > git rev-parse --show-toplevel [4ms]
+2026-05-06 09:02:36.833 [info] > git rev-parse --show-toplevel [27ms]
+2026-05-06 09:02:36.844 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [13ms]
+2026-05-06 09:02:36.847 [info] > git rev-parse --show-toplevel [3ms]
+2026-05-06 09:02:36.855 [info] > git rev-parse --show-toplevel [2ms]
+2026-05-06 09:02:36.862 [info] > git rev-parse --show-toplevel [2ms]
+2026-05-06 09:02:36.868 [info] > git rev-parse --show-toplevel [1ms]
+2026-05-06 09:02:36.874 [info] > git rev-parse --show-toplevel [2ms]
+2026-05-06 09:02:36.884 [info] > git status -z -uall [71ms]
+2026-05-06 09:02:37.188 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [249ms]
+2026-05-06 09:02:37.196 [info] > git rev-parse --show-toplevel [318ms]
+2026-05-06 09:02:37.508 [info] > git config --get --local branch.main.vscode-merge-base [313ms]
+2026-05-06 09:02:37.515 [info] > git config --get commit.template [348ms]
+2026-05-06 09:02:37.521 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/origin/main refs/remotes/origin/main [6ms]
+2026-05-06 09:02:37.533 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [32ms]
+2026-05-06 09:02:37.559 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [17ms]
+2026-05-06 09:02:37.559 [info] > git merge-base refs/heads/main refs/remotes/origin/main [27ms]
+2026-05-06 09:02:37.597 [info] > git fetch [870ms]
+2026-05-06 09:02:37.597 [info] From https://github.com/yomz84dm-ops/Sesewa.ng
+ * [new branch]      alert-autofix-10 -> origin/alert-autofix-10
+ * [new branch]      alert-autofix-11 -> origin/alert-autofix-11
+ * [new branch]      alert-autofix-12 -> origin/alert-autofix-12
+ * [new branch]      alert-autofix-13 -> origin/alert-autofix-13
+ * [new branch]      alert-autofix-14 -> origin/alert-autofix-14
+ * [new branch]      alert-autofix-15 -> origin/alert-autofix-15
+ * [new branch]      alert-autofix-16 -> origin/alert-autofix-16
+ * [new branch]      alert-autofix-17 -> origin/alert-autofix-17
+ * [new branch]      alert-autofix-18 -> origin/alert-autofix-18
+ * [new branch]      alert-autofix-19 -> origin/alert-autofix-19
+ * [new branch]      alert-autofix-20 -> origin/alert-autofix-20
+ * [new branch]      alert-autofix-21 -> origin/alert-autofix-21
+ * [new branch]      alert-autofix-22 -> origin/alert-autofix-22
+ * [new branch]      alert-autofix-8  -> origin/alert-autofix-8
+ * [new branch]      alert-autofix-9  -> origin/alert-autofix-9
+ * [new branch]      dependabot/npm_and_yarn/axios-1.16.0 -> origin/dependabot/npm_and_yarn/axios-1.16.0
+ * [new branch]      dependabot/npm_and_yarn/multi-b251156d90 -> origin/dependabot/npm_and_yarn/multi-b251156d90
+ * [new branch]      dependabot/npm_and_yarn/typescript-6.0.3 -> origin/dependabot/npm_and_yarn/typescript-6.0.3
+ * [new branch]      dependabot/npm_and_yarn/vite-8.0.10 -> origin/dependabot/npm_and_yarn/vite-8.0.10
+ * [new branch]      dependabot/npm_and_yarn/vitejs/plugin-react-6.0.1 -> origin/dependabot/npm_and_yarn/vitejs/plugin-react-6.0.1
+2026-05-06 09:02:37.597 [info] > git diff --raw --numstat --diff-filter=ADMR -z --find-renames=50% 632fed02e33c71c9b90a19b2ae5dc1bb3eea7f55...refs/remotes/origin/main -- [32ms]
+2026-05-06 09:02:37.608 [info] > git config --get commit.template [6ms]
+2026-05-06 09:02:37.614 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3ms]
+2026-05-06 09:02:37.627 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [4ms]
+2026-05-06 09:02:37.640 [info] > git status -z -uall [22ms]
+2026-05-06 09:02:37.919 [info] > git check-ignore -v -z --stdin [4ms]
+2026-05-06 09:02:40.200 [info] [Model][openRepository] Opened repository (path): /home/yomz84_dm/Sesewa.ng
+2026-05-06 09:02:40.200 [info] [Model][openRepository] Opened repository (real path): /home/yomz84_dm/Sesewa.ng
+2026-05-06 09:02:40.201 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-06 09:02:40.303 [info] > git check-ignore -v -z --stdin [59ms]
+2026-05-06 09:02:40.308 [info] > git rev-parse --show-toplevel [47ms]
+2026-05-06 09:02:40.309 [info] > git config --get commit.template [54ms]
+2026-05-06 09:02:40.693 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [15ms]
+2026-05-06 09:02:40.694 [info] > git rev-parse --show-toplevel [25ms]
+2026-05-06 09:02:40.695 [info] [Model][doInitialScan] Initial repository scan completed - repositories (2), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-06 09:02:40.736 [info] > git show --textconv :src/App.tsx [31ms]
+2026-05-06 09:02:40.736 [info] > git ls-files --stage -- src/App.tsx [21ms]
+2026-05-06 09:02:40.773 [info] > git cat-file -s 0f1d19b5b2cc8f50097bbf3597afbbdc991c6474 [32ms]
+2026-05-06 09:02:40.775 [info] > git status -z -uall [12ms]
+2026-05-06 09:02:41.065 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [293ms]
+2026-05-06 09:02:41.098 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [16ms]
+2026-05-06 09:02:41.108 [info] > git config --get commit.template [10ms]
+2026-05-06 09:02:41.116 [info] > git config --get --local branch.main.vscode-merge-base [10ms]
+2026-05-06 09:02:41.125 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [10ms]
+2026-05-06 09:02:41.126 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/origin/main refs/remotes/origin/main [3ms]
+2026-05-06 09:02:41.149 [info] > git status -z -uall [9ms]
+2026-05-06 09:02:41.150 [info] > git merge-base refs/heads/main refs/remotes/origin/main [16ms]
+2026-05-06 09:02:41.159 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [12ms]
+2026-05-06 09:02:41.174 [info] > git diff --raw --numstat --diff-filter=ADMR -z --find-renames=50% b73b796028314cc88cf31a1f6dc19d0e8b711a52...refs/remotes/origin/main -- [17ms]
+2026-05-06 09:02:41.175 [info] > git merge-base refs/heads/main refs/remotes/origin/main [4ms]
+2026-05-06 09:02:41.185 [info] > git diff --raw --numstat --diff-filter=ADMR -z --find-renames=50% b73b796028314cc88cf31a1f6dc19d0e8b711a52...refs/remotes/origin/main -- [3ms]
+2026-05-06 09:02:41.206 [info] > git check-ignore -v -z --stdin [10ms]
+2026-05-06 09:02:41.207 [info] > git check-ignore -v -z --stdin [4ms]
+2026-05-06 09:02:41.754 [info] > git check-ignore -v -z --stdin [26ms]
+2026-05-06 09:02:41.828 [info] > git blame --root --incremental 632fed02e33c71c9b90a19b2ae5dc1bb3eea7f55 -- src/App.tsx [51ms]
+2026-05-06 09:02:41.944 [info] > git fetch [1744ms]
+2026-05-06 09:02:41.944 [info] From https://github.com/yomz84dm-ops/Sesewa.ng
+ + b73b796...632fed0 main             -> origin/main  (forced update)
+ * [new branch]      alert-autofix-10 -> origin/alert-autofix-10
+ * [new branch]      alert-autofix-11 -> origin/alert-autofix-11
+ * [new branch]      alert-autofix-12 -> origin/alert-autofix-12
+ * [new branch]      alert-autofix-13 -> origin/alert-autofix-13
+ * [new branch]      alert-autofix-14 -> origin/alert-autofix-14
+ * [new branch]      alert-autofix-15 -> origin/alert-autofix-15
+ * [new branch]      alert-autofix-16 -> origin/alert-autofix-16
+ * [new branch]      alert-autofix-17 -> origin/alert-autofix-17
+ * [new branch]      alert-autofix-18 -> origin/alert-autofix-18
+ * [new branch]      alert-autofix-19 -> origin/alert-autofix-19
+ * [new branch]      alert-autofix-20 -> origin/alert-autofix-20
+ * [new branch]      alert-autofix-21 -> origin/alert-autofix-21
+ * [new branch]      alert-autofix-22 -> origin/alert-autofix-22
+ * [new branch]      alert-autofix-8  -> origin/alert-autofix-8
+ * [new branch]      alert-autofix-9  -> origin/alert-autofix-9
+ * [new branch]      dependabot/npm_and_yarn/axios-1.16.0 -> origin/dependabot/npm_and_yarn/axios-1.16.0
+ * [new branch]      dependabot/npm_and_yarn/multi-b251156d90 -> origin/dependabot/npm_and_yarn/multi-b251156d90
+ * [new branch]      dependabot/npm_and_yarn/typescript-6.0.3 -> origin/dependabot/npm_and_yarn/typescript-6.0.3
+ * [new branch]      dependabot/npm_and_yarn/vite-8.0.10 -> origin/dependabot/npm_and_yarn/vite-8.0.10
+ * [new branch]      dependabot/npm_and_yarn/vitejs/plugin-react-6.0.1 -> origin/dependabot/npm_and_yarn/vitejs/plugin-react-6.0.1
+2026-05-06 09:02:41.961 [info] > git config --get commit.template [2ms]
+2026-05-06 09:02:41.981 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [8ms]
+2026-05-06 09:02:42.012 [info] > git status -z -uall [16ms]
+2026-05-06 09:02:42.033 [info] > git check-ignore -v -z --stdin [2ms]
+2026-05-06 09:02:42.034 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [25ms]
+2026-05-06 09:02:42.069 [info] > git merge-base refs/heads/main refs/remotes/origin/main [9ms]
+2026-05-06 09:02:42.944 [info] > git diff --raw --numstat --diff-filter=ADMR -z --find-renames=50% de8960a8234c8db7dfd07e3b03ca4ba256103dd4...refs/remotes/origin/main -- [859ms]
+2026-05-06 09:02:43.978 [info] > git config --get commit.template [28ms]
+2026-05-06 09:02:44.053 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [17ms]
+2026-05-06 09:02:44.096 [info] > git status -z -uall [22ms]
+2026-05-06 09:02:44.101 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [10ms]
+2026-05-06 09:02:54.149 [info] > git config --get commit.template [63ms]
+2026-05-06 09:02:54.549 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [285ms]
+2026-05-06 09:02:54.655 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [25ms]
+2026-05-06 09:02:54.669 [info] > git status -z -uall [64ms]
+2026-05-06 09:02:55.744 [info] > git check-ignore -v -z --stdin [10ms]
+2026-05-06 09:03:04.426 [info] > git config --get commit.template [13ms]
+2026-05-06 09:03:04.427 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [2ms]
+2026-05-06 09:03:04.463 [info] > git status -z -uall [22ms]
+2026-05-06 09:03:04.467 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [13ms]

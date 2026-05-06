@@ -2158,13 +2158,6 @@ export default function App() {
                                    isHostOrSubdomainOf(host, 'firebaseapp.com') ||
                                    isHostOrSubdomainOf(host, 'web.app') ||
                                    host === '127.0.0.1';
-        const hostIsDevOrPreview = host === 'localhost' ||
-                                   host === '127.0.0.1' ||
-                                   host === 'run.app' || host.endsWith('.run.app') ||
-                                   host === 'googleusercontent.com' || host.endsWith('.googleusercontent.com') ||
-                                   host === 'firebaseapp.com' || host.endsWith('.firebaseapp.com') ||
-                                   host === 'web.app' || host.endsWith('.web.app');
-
         if (defaultDomain && defaultDomain.name.toLowerCase() !== host && !hostIsDevOrPreview) {
           const matchingDomain = domainsList.find(d => d.name.toLowerCase() === host);
           if (!matchingDomain || matchingDomain.mode !== 'serve') {
