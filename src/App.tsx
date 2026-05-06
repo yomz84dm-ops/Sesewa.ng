@@ -1933,7 +1933,6 @@ export default function App() {
       }
     }, 5000);
 
-<<<<<<< HEAD
     async function testConnection() {
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
@@ -1968,8 +1967,6 @@ export default function App() {
       toast.error(t(currentLanguage, "Low data or connection issue. Some features may be limited."));
     });
 
-=======
->>>>>>> 8602096 (update firestore rules,update server and app config and firebase.json)
     let unsubscribeUserDoc: (() => void) | null = null;
     
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
