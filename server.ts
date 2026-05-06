@@ -6,6 +6,7 @@ import cors from "cors";
 import axios, { AxiosError } from "axios";
 import path from "path";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import * as admin from "firebase-admin";
 import { onRequest } from "firebase-functions/v2/https";
 
@@ -297,6 +298,13 @@ if (shouldServe && process.env.NODE_ENV !== "test") {
       } else {
         // In production (Cloud Run), we serve static files from /dist
         const distPath = path.join(process.cwd(), 'dist');
+        const staticRateLimiter = rateLimit({
+          windowMs: 15 * 60 * 1000, // 15 minutes
+          max: 100, // limit each IP to 100 requests per window
+          standardHeaders: true,
+          legacyHeaders: false,
+        });
+        app.use(staticRateLimiter);
         app.use(express.static(distPath));
         app.get('*', (_req: Request, res: Response) => {
           res.sendFile(path.join(distPath, 'index.html'));
