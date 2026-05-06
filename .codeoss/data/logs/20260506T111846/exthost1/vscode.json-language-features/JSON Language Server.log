@@ -14,3 +14,5 @@
 2026-05-06 11:19:54.934 [info] read schema from vscode: vscode://schemas/vscode-extensions
 2026-05-06 11:19:55.329 [info] read schema from vscode: vscode://schemas/settings/configurationDefaults
 2026-05-06 11:25:09.333 [info] schema change detected vscode://schemas/settings/configurationDefaults
+2026-05-06 11:40:48.847 [info] schema change detected vscode://schemas/settings/resourceLanguage
+2026-05-06 11:40:49.077 [info] schema change detected vscode://schemas/settings/configurationDefaults
