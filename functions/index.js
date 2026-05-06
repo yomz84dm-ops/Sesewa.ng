@@ -19,7 +19,7 @@ app.post("/", (req, res) => {
 app.get("/api/health", (req, res) => {
   const key = process.env.PAYSTACK_SECRET_KEY;
   const isLoaded = !!key;
-  console.log(`[HEALTH] Paystack Secret loaded: ${isLoaded} (${isLoaded ? key.length : 0} chars)`);
+  console.log("[HEALTH] Health check requested");
   res.json({ status: "ok", secret_detected: isLoaded, service: "Ṣe Ṣe Wá Marketplace API" });
 });
 
