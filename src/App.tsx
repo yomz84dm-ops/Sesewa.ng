@@ -2758,10 +2758,19 @@ export default function App() {
   };
 
   const handleAddReview = (proId: string, rating: number, comment: string) => {
+    const max = 1000;
+    const randomBuffer = new Uint32Array(1);
+    const limit = Math.floor(0x100000000 / max) * max;
+    let randomValue: number;
+    do {
+      crypto.getRandomValues(randomBuffer);
+      randomValue = randomBuffer[0];
+    } while (randomValue >= limit);
+
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + Math.floor(Math.random() * 1000),
+      userName: 'User ' + (randomValue % max),
       rating,
       comment,
       date: new Date().toLocaleDateString()
