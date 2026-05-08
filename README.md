@@ -13,7 +13,10 @@
 - **Real-time Chat**: Direct messaging between customers and handymen.
 - **Lead System**: Professionals can unlock job leads using a credit system.
 - **User Authentication**: Secure login via Google or Email/Password.
-- **Admin Dashboard**: Manage verifications, disputes, and marketplace settings.
+- **Admin Dashboard**: Manage verifications, disputes, view analytics (Recharts), and configure settings.
+- **Formal Quotes**: Professionals can issue formal quotes containing labor, materials, and taxes directly to clients.
+- **AI Match & Analytics**: AI integration for smart matching, and robust analytical charts on the dashboard.
+- **Custom Domain Routing**: Automatic redirection to custom domain using Express routing context.
 - **Responsive Design**: Optimized for mobile, tablet, and desktop.
 
 ## 🛠️ Tech Stack
