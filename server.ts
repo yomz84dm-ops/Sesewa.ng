@@ -2,15 +2,33 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 dotenv.config();
+
+// Define a rate limiter for API endpoints
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: { error: "Too many requests, please try again later." }
+});
 
 // This function creates the Express app without starting the server.
 export async function createApi() {
   const app = express();
+  
+  // Security middlewares
+  app.use(helmet({
+    contentSecurityPolicy: false, // Turn off CSP locally to avoid breaking Vite/inline scripts
+    crossOriginEmbedderPolicy: false // Allows loading external images
+  }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(cors());
+
+  // Apply rate limiter specifically to the paystack API endpoints
+  app.use("/api/paystack/", apiLimiter);
 
   // Request logger for debugging
   app.use((req, res, next) => {
@@ -23,6 +41,24 @@ export async function createApi() {
   // API health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  // Custom Domain redirection (Server Side)
+  app.use((req, res, next) => {
+    // Only forcefully redirect in production
+    if (process.env.NODE_ENV === 'production' && !process.env.FUNCTIONS_EMULATOR) {
+      const host = req.get('host') || '';
+      
+      const isTargetHost = host === 'sesewa.ng';
+      const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
+      // Do not redirect AI Studio preview environment domains
+      const isPreviewUrl = host.includes('run.app'); 
+      
+      if (!isTargetHost && !isLocalhost && !isPreviewUrl) {
+        return res.redirect(301, `https://sesewa.ng${req.originalUrl}`);
+      }
+    }
+    next();
   });
 
   // PAYSTACK Integration
@@ -105,8 +141,16 @@ if (!isFunctionEnv && process.env.NODE_ENV !== "test") {
       // In production (Cloud Run), we serve static files from /dist
       const path = await import("path");
       const distPath = path.join(process.cwd(), 'dist');
-      app.use(express.static(distPath));
+      app.use(express.static(distPath, {
+        maxAge: '1y', // Cache static assets for 1 year
+        etag: true,
+      }));
       app.get('*', (req, res) => {
+        // Do not cache the index.html so users always get the latest bundle
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }
