@@ -2,102 +2,66 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // --- Helpers ---
-    function isSignedIn() { return request.auth != null; }
-    function isVerified() { return isSignedIn(); }
-    function incom() { return request.resource.data; }
-    function exist() { return resource.data; }
-    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
-    function isAdmin() { 
-      return isVerified() && (
-        ('email' in request.auth.token && request.auth.token.email == 'yomz84.dm@gmail.com') || 
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
-    }
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        ('email' in request.auth.token && request.auth.token.email == 'yomz84.dm@gmail.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      ); 
+    }
 
-    // --- Collection Rules ---
-
-    // 1. Handymen (Public directory)
     match /handymen/{handymanId} {
-      function isValidHandyman(data) {
-        return data.keys().hasAll(['id', 'name', 'category', 'userId']) &&
-               data.id is string && data.id.size() <= 128 &&
-               data.name is string && data.name.size() <= 100;
-      }
       allow read: if true;
-      allow create: if isVerified() && isValidId(handymanId) && isValidHandyman(incom()) && 
-                      (incom().verified == false || isAdmin()) && incom().userId == request.auth.uid;
-      allow update: if isVerified() && 
-                      (isAdmin() || (isOwner(exist().userId) && 
-                       incom().diff(exist()).affectedKeys().hasOnly(['description', 'phone', 'whatsapp', 'isOnline', 'availability', 'profileImage', 'portfolio', 'location', 'lat', 'lng'])));
-      allow delete: if isAdmin() || (isVerified() && isOwner(exist().userId));
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow delete: if isAdmin();
     }
 
-    // 2. Users (Private profiles)
     match /users/{userId} {
-      function isValidUser(data) {
-        return data.uid == userId && (data.email is string || !('email' in data));
-      }
-      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow list: if isAdmin();
-      allow create: if isVerified() && isOwner(userId) && isValidUser(incom()) && (incom().role == 'user' || isAdmin());
-      allow update: if isVerified() && (isAdmin() || (isOwner(userId) && incom().diff(exist()).affectedKeys().hasOnly(['name', 'photoURL', 'phone', 'lat', 'lng', 'lastLocationUpdate', 'role', 'plan', 'credits', 'isVerifiedPending', 'idDocumentUrl'])));
+      allow read: if true;
+      allow write: if isSignedIn() && (request.resource.data.userId == request.auth.uid || resource.data.userId == request.auth.uid || isAdmin());
     }
 
-    // 3. Job Requests (Relational access)
-    match /jobRequests/{requestId} {
-      function isValidRequest(data) {
-        return data.keys().hasAll(['id', 'proId', 'userUid']);
-      }
-      allow read, list: if isSignedIn() && (isOwner(exist().userUid) || isOwner(exist().proUserId) || isAdmin());
-      allow create: if isVerified() && isValidRequest(incom()) && isValidId(requestId) && incom().userUid == request.auth.uid;
-      allow update: if isVerified() && (
-        isAdmin() || 
-        (isOwner(exist().userUid) && incom().diff(exist()).affectedKeys().hasOnly(['status', 'jobDescription', 'amount', 'paymentStatus'])) ||
-        (isOwner(exist().proUserId) && incom().diff(exist()).affectedKeys().hasOnly(['status']))
-      );
+    match /jobRequests/{jobId} {
+      allow read: if isSignedIn() && (resource.data.userUid == request.auth.uid || resource.data.proUserId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userUid == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.userUid == request.auth.uid || resource.data.proUserId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin();
     }
 
-    // 4. Chats & Messages
-    match /chats/{chatId} {
-      allow read, list: if isSignedIn() && (request.auth.uid in exist().participants || isAdmin());
-      allow create: if isVerified() && request.auth.uid in incom().participants;
-      allow update: if isVerified() && (request.auth.uid in exist().participants && incom().diff(exist()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt', 'updatedAt']));
-      
-      match /messages/{messageId} {
-        allow read, list: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
-        allow create: if isVerified() && 
-                       request.auth.uid == incom().senderId && 
-                       request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
-      }
+    match /disputes/{disputeId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.raisedBy == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.raisedBy == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
-    // 5. Notifications
-    match /notifications/{id} {
-      allow read, list: if isSignedIn() && (isOwner(exist().userId) || isAdmin());
-      allow update: if isVerified() && isOwner(exist().userId) && incom().diff(exist()).affectedKeys().hasOnly(['read']);
-      allow delete: if isVerified() && isOwner(exist().userId);
-    }
-
-    // 6. Disputes
-    match /disputes/{id} {
-        allow read, list: if isSignedIn() && (isOwner(exist().raisedBy) || isAdmin());
-      allow create: if isVerified() && isOwner(incom().raisedBy);
-    }
-
-    // 7. Managed Domains (Readable for routing)
-    match /managedDomains/{id} {
-      allow read, list: if true;
+    match /managedDomains/{domainId} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 
-    // 8. Test connection
-    match /test/{docId} {
-      allow read: if true;
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if isSignedIn();
     }
 
-    // 9. Default deny
+    match /chats/{chatId} {
+      allow read, update: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants && request.resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    match /test/connection {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

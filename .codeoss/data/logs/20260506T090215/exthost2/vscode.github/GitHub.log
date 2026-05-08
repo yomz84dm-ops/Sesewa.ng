@@ -1,4 +1,0 @@
-2026-05-06 09:03:27.991 [info] Log level: Info
-2026-05-06 09:03:31.604 [warning] [GitHubBranchProtectionProvider][updateRepositoryBranchProtection] Failed to update repository branch protection: No GitHub authentication session available.
-2026-05-06 09:03:33.820 [warning] [GitHubBranchProtectionProvider][updateRepositoryBranchProtection] Failed to update repository branch protection: No GitHub authentication session available.
-2026-05-06 09:34:10.032 [warning] [GitHubSourceControlHistoryItemDetailsProvider][_loadAssignableUsers] Failed to load assignable user(s) for yomz84dm-ops/Sesewa.ng: Error: No GitHub authentication session available.

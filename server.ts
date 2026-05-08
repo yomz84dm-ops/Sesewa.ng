@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import axios from "axios";
 import dotenv from "dotenv";
-import rateLimit from "express-rate-limit";
 
 dotenv.config();
 
@@ -11,14 +10,6 @@ export async function createApi() {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per window
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-  app.use(limiter);
   app.use(cors());
 
   // Request logger for debugging
@@ -76,18 +67,8 @@ export async function createApi() {
         return res.status(500).json({ error: "Paystack secret key not configured" });
       }
 
-      if (
-        typeof reference !== "string" ||
-        reference.length < 6 ||
-        reference.length > 100 ||
-        !/^[A-Za-z0-9_-]+$/.test(reference)
-      ) {
-        return res.status(400).json({ error: "Invalid payment reference" });
-      }
-
-      const safeReference = encodeURIComponent(reference);
       const response = await axios.get(
-        `https://api.paystack.co/transaction/verify/${safeReference}`,
+        `https://api.paystack.co/transaction/verify/${reference}`,
         {
           headers: {
             Authorization: `Bearer ${PAYSTACK_SECRET}`
@@ -124,14 +105,8 @@ if (!isFunctionEnv && process.env.NODE_ENV !== "test") {
       // In production (Cloud Run), we serve static files from /dist
       const path = await import("path");
       const distPath = path.join(process.cwd(), 'dist');
-      const spaFallbackLimiter = rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 300, // limit repeated fallback hits per IP
-        standardHeaders: true,
-        legacyHeaders: false,
-      });
       app.use(express.static(distPath));
-      app.get('*', spaFallbackLimiter, (req, res) => {
+      app.get('*', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }

@@ -1,10 +1,9 @@
 node_modules/
-.cache/
-.cloudcode/
-dist/
 build/
+# dist/ - Needed for Firebase Functions SSR
+coverage/
+.DS_Store
+*.log
 .env*
-.codeoss/
-.npm/
-.codeoss/
-.npm/
+!.env.example
+# firebase-applet-config.json - Moved to root and needed for deployment

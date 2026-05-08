@@ -1,7 +1,0 @@
-2026-05-06 11:19:41.115 [warning] Dir "/home/yomz84_dm/.pixi/envs" is not watchable (directory does not exist)
-2026-05-06 11:19:42.829 [info] Skipping ActivatedEnv Detection:  process.env.VSCODE_CLI !== '1'
-2026-05-06 11:19:42.863 [info] > conda info --json
-2026-05-06 11:19:42.871 [info] Python interpreter path: /bin/python
-2026-05-06 11:19:43.388 [info] > pyenv which python
-2026-05-06 11:19:43.389 [info] cwd: .
-2026-05-06 11:19:50.094 [info] Starting Jedi language server for yomz84_dm.

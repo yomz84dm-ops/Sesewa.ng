@@ -6,7 +6,9 @@
 import * as React from 'react';
 import axios from 'axios';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { 
+  FileText,
   Search, 
   MapPin, 
   Wrench, 
@@ -225,6 +227,14 @@ interface JobRequest {
   status: 'pending' | 'responded' | 'on-the-way' | 'completed' | 'cancelled';
   paymentStatus?: 'none' | 'pending' | 'escrowed' | 'released' | 'refunded' | 'disputed';
   amount?: number;
+  quoteDetails?: {
+    materials: number;
+    labor: number;
+    taxes: number;
+    notes: string;
+  };
+  scheduledDate?: string;
+  scheduledTime?: string;
   paystackReference?: string;
   date: string;
   unlockedBy?: string[]; // List of handyman UIDs who have unlocked this lead
@@ -263,7 +273,7 @@ interface Notification {
 interface Handyman {
   id: string;
   name: string;
-  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services' | 'Manicure' | 'Pedicure' | 'Hairstylist' | 'Barber' | 'Horticulturist' | 'Tattoo artist' | 'Generator Repair' | 'Satellite Installer' | 'Lawyer' | 'Accountant' | 'House Removal' | 'Home Tutor' | 'Inverter Specialist' | 'Borehole Driller';
+  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services' | 'Manicure' | 'Pedicure' | 'Hairstylist' | 'Barber' | 'Horticulturist' | 'Tattoo artist' | 'Generator Repair' | 'Satellite Installer' | 'Lawyer' | 'Accountant' | 'House Removal' | 'Home Tutor' | 'Inverter Specialist' | 'Borehole Driller' | 'Shoe Maker';
   location: string;
   lat: number;
   lng: number;
@@ -692,6 +702,23 @@ const INITIAL_HANDYMEN: Handyman[] = [
     isOnline: true,
     description: 'Professional installation of DSTV, GOTV, and StarTimes. Signal optimization and mounting.',
     portfolio: ['https://loremflickr.com/400/300/satellite,dish', 'https://loremflickr.com/400/300/antenna,tv'],
+  },
+  {
+    id: '24',
+    name: 'Kingsley Shoes',
+    category: 'Shoe Maker',
+    location: 'Yaba, Lagos',
+    lat: 6.5095,
+    lng: 3.3711,
+    rating: 4.8,
+    reviews: 35,
+    phone: '08123456789',
+    experience: '8 years',
+    experienceYears: 8,
+    verified: true,
+    isOnline: true,
+    description: 'Expert shoe cobbler and leather works. Repair, design, and shining.',
+    portfolio: ['https://loremflickr.com/400/300/shoes,leather', 'https://loremflickr.com/400/300/shoe,repair'],
   }
 ];
 
@@ -833,6 +860,7 @@ const CATEGORIES = [
   { name: 'Accountant', icon: Calculator },
   { name: 'House Removal', icon: Truck },
   { name: 'Home Tutor', icon: BookOpen },
+  { name: 'Shoe Maker', icon: Footprints },
 ];
 
 // --- Helpers ---
@@ -1934,9 +1962,7 @@ export default function App() {
     async function testConnection() {
       try {
         await getDocFromServer(doc(db, 'test', 'connection'));
-        console.log("Firestore connection test: SUCCESS");
       } catch (error) {
-        console.error("Firestore connection test: FAILED", error);
         if (error instanceof Error && error.message.includes('the client is offline')) {
           console.error("Please check your Firebase configuration. The client is offline.");
         }
@@ -1955,14 +1981,11 @@ export default function App() {
       
       setHandymen(dbHandymen);
     }, (error) => {
-      console.error("Handymen feed error:", error);
       try {
         handleFirestoreError(error, OperationType.LIST, 'handymen');
       } catch (e) {
-        // handleFirestoreError throws, but we want to just log it and show toast
-        console.error("Handymen feed error details:", e);
+        // catch silently for feed
       }
-      toast.error(t(currentLanguage, "Low data or connection issue. Some features may be limited."));
     });
 
     let unsubscribeUserDoc: (() => void) | null = null;
@@ -2149,15 +2172,13 @@ export default function App() {
 
         // 2. Handle Default Domain redirection (if current host is not configured)
         const defaultDomain = domainsList.find(d => d.isDefault);
-        const isHostOrSubdomainOf = (currentHost: string, domain: string): boolean =>
-          currentHost === domain || currentHost.endsWith(`.${domain}`);
+        const hostIsDevOrPreview = host.includes('localhost') || 
+                                   host.includes('.run.app') || 
+                                   host.includes('.googleusercontent.com') ||
+                                   host.includes('.firebaseapp.com') ||
+                                   host.includes('.web.app') ||
+                                   host.includes('127.0.0.1');
 
-        const hostIsDevOrPreview = isHostOrSubdomainOf(host, 'localhost') || 
-                                   isHostOrSubdomainOf(host, 'run.app') || 
-                                   isHostOrSubdomainOf(host, 'googleusercontent.com') ||
-                                   isHostOrSubdomainOf(host, 'firebaseapp.com') ||
-                                   isHostOrSubdomainOf(host, 'web.app') ||
-                                   host === '127.0.0.1';
         if (defaultDomain && defaultDomain.name.toLowerCase() !== host && !hostIsDevOrPreview) {
           const matchingDomain = domainsList.find(d => d.name.toLowerCase() === host);
           if (!matchingDomain || matchingDomain.mode !== 'serve') {
@@ -2756,29 +2777,11 @@ export default function App() {
     }
   };
 
-  const getUnbiasedRandomInt = (maxExclusive: number): number => {
-    if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
-      throw new Error('maxExclusive must be a positive integer');
-    }
-
-    const maxUint32 = 0x100000000;
-    const limit = maxUint32 - (maxUint32 % maxExclusive);
-    const randomArray = new Uint32Array(1);
-    let value: number;
-
-    do {
-      globalThis.crypto.getRandomValues(randomArray);
-      value = randomArray[0];
-    } while (value >= limit);
-
-    return value % maxExclusive;
-  };
-
   const handleAddReview = (proId: string, rating: number, comment: string) => {
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + getUnbiasedRandomInt(1000),
+      userName: 'User ' + Math.floor(Math.random() * 1000),
       rating,
       comment,
       date: new Date().toLocaleDateString()
@@ -3036,6 +3039,7 @@ export default function App() {
   const [showDisputeModal, setShowDisputeModal] = useState<JobRequest | null>(null);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [showPaymentModal, setShowPaymentModal] = useState<JobRequest | null>(null);
+  const [showQuoteModal, setShowQuoteModal] = useState<JobRequest | null>(null);
 
   const handleUpdateUserProfile = async (data: { name: string, phone: string }) => {
     if (!currentUser) return;
@@ -3070,7 +3074,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleRequestQuote = async (formData: { name: string, description: string }) => {
+  const handleRequestQuote = async (formData: { name: string, description: string, scheduledDate?: string, scheduledTime?: string }) => {
     if (!requestingQuotePro) return;
 
     try {
@@ -3082,6 +3086,8 @@ export default function App() {
         userName: formData.name,
         userPhone: currentUser?.phone || '',
         jobDescription: formData.description,
+        scheduledDate: formData.scheduledDate || '',
+        scheduledTime: formData.scheduledTime || '',
         status: 'pending',
         date: serverTimestamp(),
         unlockedBy: []
@@ -3108,6 +3114,22 @@ export default function App() {
       // alert("Quote request sent! You can now chat with the professional in the Messages tab.");
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'jobRequests');
+    }
+  };
+
+  const handleSendQuote = async (jobRequestId: string, quoteDetails: { labor: number, materials: number, taxes: number, notes: string }) => {
+    try {
+      const totalAmount = quoteDetails.labor + quoteDetails.materials + quoteDetails.taxes;
+      await updateDoc(doc(db, 'jobRequests', jobRequestId), {
+        status: 'responded',
+        amount: totalAmount,
+        paymentStatus: 'pending',
+        quoteDetails
+      });
+      alert('Quote sent successfully!');
+      setShowQuoteModal(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, 'jobRequests');
     }
   };
 
@@ -3950,9 +3972,15 @@ export default function App() {
                     <div className="bg-slate-50 p-4 rounded-xl mb-4">
                       <div className="flex flex-col gap-1">
                         <p className="text-slate-600 text-sm italic">"{req.jobDescription}"</p>
+                        {req.scheduledDate && (
+                          <div className="flex items-center gap-2 mt-2 text-xs font-bold text-slate-500">
+                            <Clock size={14} className="text-blue-500" />
+                            Target: {new Date(req.scheduledDate).toLocaleDateString()} at {req.scheduledTime}
+                          </div>
+                        )}
                         <button 
                           onClick={() => handleTranslate(req.jobDescription, req.id)}
-                          className="text-[10px] text-blue-600 font-bold flex items-center gap-1 hover:underline w-fit"
+                          className="text-[10px] text-blue-600 font-bold flex items-center gap-1 hover:underline w-fit mt-1"
                         >
                           <Globe size={10} />
                           {isTranslating === req.id ? t('Translating...', currentLanguage) : `${t('Translate to', currentLanguage)} ${currentLanguage}`}
@@ -3964,11 +3992,12 @@ export default function App() {
                       <div className="flex flex-col gap-4">
                         <div className="flex flex-wrap gap-2">
                           <button 
-                            onClick={() => handleUpdateJobStatus(req, 'responded')}
+                            onClick={() => setShowQuoteModal(req)}
                             disabled={req.status === 'responded' || req.status === 'on-the-way' || req.status === 'completed'}
-                            className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                            className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
                           >
-                            Mark as Responded
+                            <FileText size={14} />
+                            Send Formal Quote
                           </button>
                           <button 
                             onClick={() => handleUpdateJobStatus(req, 'on-the-way')}
@@ -4044,13 +4073,32 @@ export default function App() {
                         </div>
                         
                         <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-                          {req.paymentStatus === 'pending' && (
+                          {req.amount && req.quoteDetails && (
+                            <div className="w-full bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-2">
+                              <h4 className="font-bold text-slate-900 text-sm mb-2 flex items-center gap-2">
+                                <FileText size={16} className="text-blue-600" />
+                                Payment Quote
+                              </h4>
+                              <div className="space-y-1 text-xs text-slate-600 mb-3 border-b border-slate-200 pb-3">
+                                <div className="flex justify-between"><span>Labor</span><span>₦{req.quoteDetails.labor.toLocaleString()}</span></div>
+                                <div className="flex justify-between"><span>Materials</span><span>₦{req.quoteDetails.materials.toLocaleString()}</span></div>
+                                <div className="flex justify-between"><span>Taxes/Fees</span><span>₦{req.quoteDetails.taxes.toLocaleString()}</span></div>
+                                {req.quoteDetails.notes && <p className="mt-2 text-[10px] italic">"{req.quoteDetails.notes}"</p>}
+                              </div>
+                              <div className="flex justify-between font-black text-slate-900 text-sm">
+                                <span>Total Amount</span>
+                                <span>₦{req.amount.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {req.paymentStatus === 'pending' && req.amount && (
                             <button 
-                              onClick={() => handleInitializePayment(req, 5000)}
-                              className="px-6 py-3 bg-blue-600 text-white text-xs font-bold rounded-2xl hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all"
+                              onClick={() => handleInitializePayment(req, req.amount!)}
+                              className="px-6 py-3 bg-blue-600 text-white text-xs font-bold rounded-2xl hover:bg-blue-700 flex items-center gap-2 shadow-lg shadow-blue-600/20 active:scale-95 transition-all w-full justify-center sm:justify-start sm:w-auto"
                             >
                               <CreditCard size={14} />
-                              Pay ₦5,000 (Escrow)
+                              Pay ₦{req.amount.toLocaleString()} (Escrow)
                             </button>
                           )}
                           
@@ -5352,6 +5400,65 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Admin Analytics Dashboard */}
+                <div className="mb-12">
+                  <div className="flex items-center gap-2 mb-6">
+                    <h3 className="text-xl font-bold text-slate-900">Platform Analytics</h3>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <div className="bg-white border text-center border-slate-200 rounded-3xl p-6 shadow-sm">
+                      <p className="text-slate-500 text-sm font-medium mb-1">Total Pros</p>
+                      <h4 className="text-3xl font-black text-slate-900">{handymen.length}</h4>
+                    </div>
+                    <div className="bg-white border text-center border-slate-200 rounded-3xl p-6 shadow-sm">
+                      <p className="text-slate-500 text-sm font-medium mb-1">Total Jobs</p>
+                      <h4 className="text-3xl font-black text-blue-600">{jobRequests.length}</h4>
+                    </div>
+                    <div className="bg-white border text-center border-slate-200 rounded-3xl p-6 shadow-sm">
+                      <p className="text-slate-500 text-sm font-medium mb-1">Escrow Volume</p>
+                      <h4 className="text-3xl font-black text-emerald-600">
+                        ₦{jobRequests.reduce((acc, job) => acc + (job.price || 0), 0).toLocaleString()}
+                      </h4>
+                    </div>
+                    <div className="bg-white border text-center border-slate-200 rounded-3xl p-6 shadow-sm">
+                      <p className="text-slate-500 text-sm font-medium mb-1">Active Disputes</p>
+                      <h4 className="text-3xl font-black text-amber-500">{disputes.filter(d => d.status === 'open').length}</h4>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm mb-6">
+                    <h4 className="font-bold text-slate-900 mb-6">Job Requests Overview</h4>
+                    <div className="h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={[
+                          { name: 'Mon', jobs: 12, escrow: 45000 },
+                          { name: 'Tue', jobs: 19, escrow: 84000 },
+                          { name: 'Wed', jobs: 15, escrow: 62000 },
+                          { name: 'Thu', jobs: 22, escrow: 115000 },
+                          { name: 'Fri', jobs: 28, escrow: 140000 },
+                          { name: 'Sat', jobs: 35, escrow: 210000 },
+                          { name: 'Sun', jobs: 25, escrow: 95000 },
+                        ]}>
+                          <defs>
+                            <linearGradient id="colorJobs" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
+                          <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dx={-10} />
+                          <RechartsTooltip 
+                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                          />
+                          <Area type="monotone" dataKey="jobs" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorJobs)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Disputes Section */}
                 {disputes.length > 0 && (
                   <div className="mb-12">
@@ -5677,13 +5784,27 @@ export default function App() {
                 const fd = new FormData(e.currentTarget);
                 handleRequestQuote({
                   name: fd.get('name') as string,
-                  description: fd.get('description') as string
+                  description: fd.get('description') as string,
+                  scheduledDate: fd.get('scheduledDate') as string,
+                  scheduledTime: fd.get('scheduledTime') as string
                 });
               }}>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Your Name</label>
                   <input name="name" placeholder="Enter your name" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
                 </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Preferred Date</label>
+                    <input type="date" name="scheduledDate" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Preferred Time</label>
+                    <input type="time" name="scheduledTime" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm" />
+                  </div>
+                </div>
+
                 <div className="space-y-1">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between ml-1 gap-2 sm:gap-0">
                     <label className="text-[10px] font-bold text-slate-400 uppercase">Job Description</label>
@@ -6256,6 +6377,80 @@ export default function App() {
           &copy; 2026 Ṣe Ṣẹ Wá Golding Limited. {currentMarket.name}'s leading platform for repairs.
         </p>
       </footer>
+
+      {/* Quote Modal */}
+      <AnimatePresence>
+        {showQuoteModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowQuoteModal(null)}
+              className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto"
+            >
+              <h2 className="text-xl sm:text-2xl font-bold mb-2 flex items-center gap-2">
+                <FileText className="text-blue-600" />
+                Send Formal Quote
+              </h2>
+              <p className="text-slate-500 mb-6 text-sm">
+                Provide a cost breakdown to <span className="font-bold text-slate-900">{showQuoteModal.userName}</span>.
+              </p>
+              
+              <form className="space-y-4" onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                handleSendQuote(showQuoteModal.id, {
+                  labor: Number(fd.get('labor')),
+                  materials: Number(fd.get('materials')),
+                  taxes: Number(fd.get('taxes')),
+                  notes: fd.get('notes') as string
+                });
+              }}>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Labor Cost (₦)</label>
+                    <input type="number" min="0" name="labor" placeholder="e.g. 5000" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-mono" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Material Cost (₦)</label>
+                    <input type="number" min="0" name="materials" defaultValue="0" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-mono" />
+                  </div>
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Taxes / Fees (₦)</label>
+                  <input type="number" min="0" name="taxes" defaultValue="0" required className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-mono" />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Additional Notes</label>
+                  <textarea 
+                    name="notes" 
+                    placeholder="Describe the scope of work and materials needed..." 
+                    required 
+                    className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500/20 h-24 text-sm" 
+                  />
+                </div>
+                
+                <div className="flex gap-2 pt-4">
+                  <button type="button" onClick={() => setShowQuoteModal(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-all text-sm">Cancel</button>
+                  <button type="submit" className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 text-sm">
+                    <FileText size={16} />
+                    Send Quote
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Terms of Service Modal */}
       <AnimatePresence>

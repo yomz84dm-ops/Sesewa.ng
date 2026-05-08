@@ -5,18 +5,7 @@ const axios = require("axios");
 
 // Version: 1.0.2 - Self-contained Marketplace API
 const app = express();
-const allowedOrigins = [
-  "https://your-allowed-frontend.com",
-  "https://your-other-allowed-frontend.com"
-];
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. server-to-server, curl, mobile apps)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(null, false);
-  }
-}));
+app.use(cors({ origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
