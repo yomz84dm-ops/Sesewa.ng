@@ -1492,7 +1492,7 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
             <>
               <Volume2 size={16} className="shrink-0" />
               <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest whitespace-nowrap">
-                {lang === 'Pidgin' ? 'Padi Greet Me' : 'Hi Padi'}
+                {t('Hi Padi', lang)}
               </span>
               <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white" />
             </>
@@ -2363,11 +2363,11 @@ export default function App() {
 
     switch (error.code) {
       case 'auth/network-request-failed':
-        return t(currentLanguage, 'Connection issue detected. Please check your internet or data connection and try again.');
+        return t('Connection issue detected. Please check your internet or data connection and try again.', currentLanguage);
       case 'auth/internal-error':
-        return t(currentLanguage, 'There was a problem signing you in due to a temporary connection drop. Please wait a moment and try again.');
+        return t('There was a problem signing you in due to a temporary connection drop. Please wait a moment and try again.', currentLanguage);
       case 'auth/timeout':
-        return t(currentLanguage, 'The login request timed out. This usually happens on slow data connections. Please try moving to a better signal area.');
+        return t('The login request timed out. This usually happens on slow data connections. Please try moving to a better signal area.', currentLanguage);
       case 'auth/operation-not-allowed':
         return "Sign-in method is currently disabled. Please contact the administrator.";
       case 'auth/popup-blocked':
@@ -2403,12 +2403,12 @@ export default function App() {
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
       setShowAuthModal(false);
-      toast.success(t(currentLanguage, 'welcomeBack'));
+      toast.success(t('welcomeBack', currentLanguage));
     } catch (error: any) {
       const errorMessage = getAuthErrorMessage(error);
       if (errorMessage) {
         setAuthError(errorMessage);
-        toast.error(t(currentLanguage, "Login Problem"), { 
+        toast.error(t("Login Problem", currentLanguage), { 
           description: errorMessage,
           duration: 6000 // Show longer for connection errors
         });
@@ -2435,21 +2435,21 @@ export default function App() {
       if (authMode === 'login') {
         await signInWithEmailAndPassword(auth, authEmail, authPassword);
         setShowAuthModal(false);
-        toast.success(t(currentLanguage, 'welcomeBack'));
+        toast.success(t('welcomeBack', currentLanguage));
       } else if (authMode === 'signup') {
         await createUserWithEmailAndPassword(auth, authEmail, authPassword);
         setShowAuthModal(false);
-        toast.success(t(currentLanguage, 'accountCreated'));
+        toast.success(t('accountCreated', currentLanguage));
       } else if (authMode === 'reset') {
         await sendPasswordResetEmail(auth, authEmail);
         setResetSent(true);
-        toast.success(t(currentLanguage, 'resetEmailSent'));
+        toast.success(t('resetEmailSent', currentLanguage));
       }
     } catch (error: any) {
       const errorMessage = getAuthErrorMessage(error);
       if (errorMessage) {
         setAuthError(errorMessage);
-        toast.error(t(currentLanguage, "Authentication Problem"), { 
+        toast.error(t("Authentication Problem", currentLanguage), { 
           description: errorMessage,
           duration: 6000
         });
@@ -5418,7 +5418,7 @@ export default function App() {
                     <div className="bg-white border text-center border-slate-200 rounded-3xl p-6 shadow-sm">
                       <p className="text-slate-500 text-sm font-medium mb-1">Escrow Volume</p>
                       <h4 className="text-3xl font-black text-emerald-600">
-                        ₦{jobRequests.reduce((acc, job) => acc + (job.price || 0), 0).toLocaleString()}
+                        ₦{jobRequests.reduce((acc, job) => acc + (job.amount || 0), 0).toLocaleString()}
                       </h4>
                     </div>
                     <div className="bg-white border text-center border-slate-200 rounded-3xl p-6 shadow-sm">
@@ -6273,7 +6273,7 @@ export default function App() {
             : 'text-slate-400 active:bg-slate-50'
           }`}
         >
-          <Home size={20} weight={(!showPricing && !showRequests && !showChatList && !showUserProfileModal && !showEditProfile && !showAdminDashboard) ? "fill" : "regular"} />
+          <Home size={20} className={(!showPricing && !showRequests && !showChatList && !showUserProfileModal && !showEditProfile && !showAdminDashboard) ? "fill-current" : ""} />
           <span className="text-[9px] font-black uppercase tracking-tight">{t('Home', currentLanguage)}</span>
         </button>
         <button 

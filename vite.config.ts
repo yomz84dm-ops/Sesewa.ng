@@ -15,6 +15,9 @@ export default defineConfig(({mode}) => {
       'process.env.NODE_ENV': JSON.stringify(mode),
     },
     server: {
+      port: 3000,
+      host: '0.0.0.0',
+      allowedHosts: true,
       hmr: process.env.DISABLE_HMR !== 'true',
     }
   };
