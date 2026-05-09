@@ -122,12 +122,7 @@ export async function createApi() {
   return app;
 }
 
-// Development and Cloud Run mode
-// FUNCTIONS_EMULATOR and FIREBASE_CONFIG are specific to the Function environment.
-// GCLOUD_PROJECT can be present in both, so we use it as a fallback but prioritize the others.
-const isFunctionEnv = process.env.FUNCTIONS_EMULATOR || process.env.FIREBASE_CONFIG;
-
-if (!isFunctionEnv && process.env.NODE_ENV !== "test") {
+if (process.env.NODE_ENV !== "test") {
   createApi().then(async (app) => {
     // In dev mode, we also mount the Vite middleware
     if (process.env.NODE_ENV !== "production") {
@@ -159,5 +154,8 @@ if (!isFunctionEnv && process.env.NODE_ENV !== "test") {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
+  }).catch((err) => {
+    console.error("Failed to start server:", err);
+    process.exit(1);
   });
 }
