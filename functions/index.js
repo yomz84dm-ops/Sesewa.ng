@@ -325,8 +325,14 @@ app.get("/api/paystack/verify/:reference", async (req, res) => {
       return res.status(500).json({ error: "Paystack secret key not configured" });
     }
 
+    if (typeof reference !== "string" || !/^[A-Za-z0-9_-]{6,100}$/.test(reference)) {
+      return res.status(400).json({ error: "Invalid payment reference" });
+    }
+
+    const safeReference = encodeURIComponent(reference);
+
     const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${reference}`,
+      `https://api.paystack.co/transaction/verify/${safeReference}`,
       {
         headers: {
           Authorization: `Bearer ${key}`
