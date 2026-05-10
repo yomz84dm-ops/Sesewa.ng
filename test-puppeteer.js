@@ -7,7 +7,7 @@ import puppeteer from 'puppeteer';
   page.on('console', msg => console.log('BROWSER LOG:', msg.text()));
   page.on('pageerror', err => console.log('BROWSER ERROR:', err.message));
   
-  await page.goto('http://localhost:9003', { waitUntil: 'networkidle0' });
+  await page.goto('https://sesewa.ng', { waitUntil: 'networkidle2' });
   
   console.log("Page loaded. Closing browser.");
   await browser.close();

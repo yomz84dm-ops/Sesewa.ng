@@ -1827,30 +1827,12 @@ export default function App() {
   useEffect(() => {
     // Check AI readiness
     const checkAI = async () => {
-      try {
-        const key = 
-          process.env.GEMINI_API_KEY || 
-          process.env.API_KEY || 
-          process.env.VITE_GEMINI_API_KEY || 
-          (import.meta.env?.GEMINI_API_KEY as string);
-
-        if (!key || key.length < 5) {
-          console.error("AI Service Error: AI keys are missing or invalid in environment.");
-          toast.warning("AI Assistant Delayed", { 
-            description: "Some AI features might be limited. Please ensure your GEMINI_API_KEY is configured in Settings and that you have restarted the dev server.",
-            duration: 15000
-          });
-        } else {
-          // AI Service Ready
-        }
-      } catch (e) {
-        console.error("AI Service Error: Could not check AI keys.", e);
-      }
+      // AI Service Ready via backend
     };
     checkAI();
   }, []);
 
-  const [handymen, setHandymen] = useState<Handyman[]>(INITIAL_HANDYMEN);
+  const [handymen, setHandymen] = useState<Handyman[]>([]);
 
   // Geolocation Tracking
   useEffect(() => {
@@ -2781,19 +2763,10 @@ export default function App() {
   };
 
   const handleAddReview = (proId: string, rating: number, comment: string) => {
-    const suffixRange = 1000;
-    const maxUint32 = 0x100000000;
-    const maxUnbiasedValue = Math.floor(maxUint32 / suffixRange) * suffixRange;
-    let randomValue: number;
-    do {
-      randomValue = crypto.getRandomValues(new Uint32Array(1))[0];
-    } while (randomValue >= maxUnbiasedValue);
-    const randomUserSuffix = randomValue % suffixRange;
-
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + randomUserSuffix,
+      userName: 'User ' + Math.floor(Math.random() * 1000),
       rating,
       comment,
       date: new Date().toLocaleDateString()
@@ -2903,8 +2876,8 @@ export default function App() {
       const job = jobRequests.find(j => j.paystackReference === reference);
       if (job && job.paymentStatus === 'pending') {
         handleVerifyPayment(reference, job.id);
-        // Clean up URL
-        window.history.replaceState({}, document.title, window.location.pathname);
+        // Clean up URL and redirect to home
+        window.history.replaceState({}, document.title, '/');
       }
     }
   }, [jobRequests]);
@@ -2970,7 +2943,8 @@ export default function App() {
       });
       
       if (response.data.status) {
-        window.open(response.data.data.authorization_url, '_blank');
+        // Use window.location.href to avoid popup blockers
+        window.location.href = response.data.data.authorization_url;
         
         await updateDoc(doc(db, 'jobRequests', jobRequest.id), {
           paystackReference: response.data.data.reference,

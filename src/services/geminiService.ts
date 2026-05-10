@@ -1,192 +1,85 @@
-import { GoogleGenAI, Type, Modality } from "@google/genai";
-
-let aiInstance: GoogleGenAI | null = null;
-
-const getAIClient = (): GoogleGenAI => {
-  if (!aiInstance) {
-    const key = process.env.GEMINI_API_KEY || "";
-    if (!key) {
-      console.warn("HandyPadi: GEMINI_API_KEY is not defined in the environment.");
-      // We still mock it or provide a dummy string to prevent the app from completely dying?
-      // Wait, GoogleGenAI constructor strictly validates the key if not empty string.
-      // But actually, it throws if the key is empty in the browser!
-      // But wait... actually if we want to bypass it completely, we should just throw an error here,
-      // and catch it where `getAIClient()` is used. But wait! `getAIClient()` is called in the methods later.
-      // Yes, those methods are wrapped in try-catch blocks and they catch the errors!
-      // This is exactly what we want!
-    }
-    aiInstance = new GoogleGenAI({ 
-      apiKey: key || "dummy-key-to-prevent-startup-crash-if-needed"
-    });
-  }
-  return aiInstance;
-};
-
+const API_URL = import.meta.env.VITE_API_URL || '/api'; 
 const translationCache: Record<string, string> = {};
 
 export const geminiService = {
-  /**
-   * 1. Smart Matching & Semantic Search
-   */
   async matchHandymen(query: string, handymen: any[]) {
     try {
-      console.log("HandyPadi: Matching handymen for query:", query);
-      const prompt = `
-        User Query: "${query}"
-        Available Professionals:
-        ${JSON.stringify(handymen.map((h: any) => ({ id: h.id, name: h.name, category: h.category, description: h.description })))}
-        Identify the top 3 most relevant professionals. Return only their IDs in a JSON array.
-      `;
-
-      const response = await getAIClient().models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-          systemInstruction: "You are a professional matching expert for Ṣe Ṣe Wá. Identify the best pros based on user needs.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          }
-        }
+      const response = await fetch(`${API_URL}/ai/match-handymen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, handymen })
       });
-      return JSON.parse(response.text || "[]");
+      if (!response.ok) throw new Error(await response.text());
+      return await response.json();
     } catch (error) {
       console.error("Smart Matching Error:", error);
       return [];
     }
   },
 
-  /**
-   * 2. Job Description Assistant
-   */
   async refineJobDescription(initialDescription: string) {
     try {
-      console.log("HandyPadi: Refining job description...");
-      const prompt = `
-        The user wants to request a handyman service with this initial description: "${initialDescription}"
-        Act as a helpful assistant. If the description is vague, ask 2-3 clarifying questions.
-        If it's good, provide a professional detailed version.
-        Return ONLY valid JSON: {"isRefined": boolean, "content": string}
-      `;
-
-      const response = await getAIClient().models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-          systemInstruction: "You are a job description specialist for Ṣe Ṣe Wá. Help users articulate their needs effectively.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              isRefined: { type: Type.BOOLEAN },
-              content: { type: Type.STRING }
-            },
-            required: ["isRefined", "content"]
-          }
-        }
+      const response = await fetch(`${API_URL}/ai/refine-description`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initialDescription })
       });
-      return JSON.parse(response.text || "null");
+      if (!response.ok) throw new Error(await response.text());
+      return await response.json();
     } catch (error) {
       console.error("Refine Description Error:", error);
       return null;
     }
   },
 
-  /**
-   * 3. Review Summarization
-   */
   async summarizeReviews(reviews: any[]) {
     if (reviews.length === 0) return "No reviews yet to summarize.";
     try {
-      const prompt = `Summarize these reviews into 3 concise sentences: ${JSON.stringify(reviews.map((r: any) => r.comment))}`;
-      const response = await getAIClient().models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-          systemInstruction: "You are a helpful review analyst for Ṣe Ṣe Wá. Summarize user feedback accurately and concisely."
-        }
+      const response = await fetch(`${API_URL}/ai/summarize-reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviews })
       });
-      return response.text || "Unable to summarize.";
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      return data.result || "Unable to summarize.";
     } catch (error) {
       console.error("Review Summarization Error:", error);
       return "Unable to summarize reviews.";
     }
   },
 
-  /**
-   * 4. Image Analysis (Multimodal)
-   */
   async analyzeIssueImage(base64Image: string, mimeType: string) {
     try {
-      console.log("HandyPadi: Analyzing image...");
-      const prompt = "Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation.";
-
-      const response = await getAIClient().models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { inlineData: { data: base64Image, mimeType } },
-              { text: prompt }
-            ]
-          }
-        ],
-        config: {
-          systemInstruction: "You are a technical household damage expert. Identify problems correctly from images.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              issue: { type: Type.STRING },
-              suggestedCategory: { type: Type.STRING },
-              explanation: { type: Type.STRING }
-            },
-            required: ["issue", "suggestedCategory", "explanation"]
-          }
-        }
+      const response = await fetch(`${API_URL}/ai/analyze-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64Image, mimeType })
       });
-      return JSON.parse(response.text || "null");
+      if (!response.ok) throw new Error(await response.text());
+      return await response.json();
     } catch (error) {
       console.error("Image Analysis Error:", error);
       return null;
     }
   },
 
-  /**
-   * 5. HandyPadi Chat (General Help)
-   */
   async handyPadiChat(message: string, history: any[] = [], currentLanguage: string = 'English') {
     try {
-      console.log("HandyPadi: Chatting in language:", currentLanguage);
-      const response = await getAIClient().models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          ...history.map((msg: any) => ({
-            role: msg.role === 'user' ? 'user' : 'model',
-            parts: [{ text: msg.text }]
-          })),
-          { role: 'user', parts: [{ text: message }] }
-        ],
-        config: {
-          systemInstruction: `You are HandyPadi, the AI assistant for Ṣe Ṣe Wá, a handyman marketplace in Nigeria. 
-            The user's preferred language is ${currentLanguage}. 
-            Respond in ${currentLanguage} if possible, or use a natural mix of English and ${currentLanguage} (like Pidgin) if appropriate.
-            Help users find pros, explain the escrow system, and answer general questions about the platform. 
-            Be helpful, professional, and concise.`
-        }
+      const response = await fetch(`${API_URL}/ai/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, history, currentLanguage })
       });
-      return response.text || "I'm sorry, I couldn't generate a response.";
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      return data.result || "I'm sorry, I couldn't generate a response.";
     } catch (error) {
-      console.error("HandyPadi Error:", error);
+      console.error("HandyPadi Chat Error:", error);
       return "I'm having trouble connecting to the HandyPadi AI right now. Please try again later.";
     }
   },
 
-  /**
-   * 6. Localization/Translation Helper
-   */
   async translateText(text: string, targetLanguage: string) {
     if (!text) return "";
     const langLower = targetLanguage.toLowerCase();
@@ -196,31 +89,14 @@ export const geminiService = {
     if (translationCache[cacheKey]) return translationCache[cacheKey];
 
     try {
-       let prompt = "";
-      if (langLower === 'pidgin') {
-        prompt = `You are a professional translator specializing in Nigerian Pidgin English. 
-        Translate the following message into natural, widely-understood Nigerian Pidgin.
-        Maintain the helpful and friendly tone of the original brand.
-        
-        Original English: "${text}"
-        
-        Return ONLY the translated Pidgin text. Do not include any quotes, notes, or explanations.`;
-      } else {
-        prompt = `You are a professional translator. 
-        Translate the following text into ${targetLanguage}. 
-        Return ONLY the translated text. Do not include quotes, notes, or any other text.
-        
-        Text to translate: "${text}"`;
-      }
-
-      const response = await getAIClient().models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-          systemInstruction: "You are a professional translator for Ṣe Ṣe Wá. Localize content accurately for Nigerian audiences."
-        }
+      const response = await fetch(`${API_URL}/ai/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, targetLanguage })
       });
-      const resultText = response.text || text;
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      const resultText = data.result || text;
       translationCache[cacheKey] = resultText;
       return resultText;
     } catch (error) {
@@ -231,28 +107,17 @@ export const geminiService = {
 
   async speakWelcome(language: string) {
     try {
-      console.log("HandyPadi: Generating voice greeting for language:", language);
       const welcomeText = `Welcome to Ṣe Ṣe Wá HandyPadi, your trusted partner for all home services in Nigeria. How can we help you today?`;
       let translatedText = await this.translateText(welcomeText, language);
       
-      const response = await getAIClient().models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: `Say cheerfully: ${translatedText}` }] }],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Zephyr' },
-            },
-          },
-        }
+      const response = await fetch(`${API_URL}/ai/speak-welcome`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: translatedText })
       });
-
-      const audioData = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
-      if (!audioData) {
-        console.warn("HandyPadi: Voice generation returned no audio data.");
-      }
-      return audioData || null;
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      return data.audioData || null;
     } catch (error) {
       console.error("Voice Welcome Error:", error);
       return null;

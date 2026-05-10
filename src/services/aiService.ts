@@ -1,16 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-let aiInstance: GoogleGenAI | null = null;
-
-const getAIClient = (): GoogleGenAI => {
-  if (!aiInstance) {
-    const key = process.env.GEMINI_API_KEY || "";
-    aiInstance = new GoogleGenAI({ 
-      apiKey: key || "dummy-key-to-prevent-startup-crash-if-needed"
-    });
-  }
-  return aiInstance;
-};
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export interface PriceEstimation {
   minPrice: number;
@@ -30,37 +18,17 @@ export async function getPriceEstimation(
   language: string = "English"
 ): Promise<PriceEstimation> {
   try {
-    const prompt = `
-      You are the Global Ṣe Ṣe Wá Pricing Expert for the Pan-African Handyman Marketplace.
-      Analyze the following task: "${task}" in the location: "${location}, ${country}".
-      Provide a fair market price range in ${currency}.
-      - Account for the specific cost of living, logistics, and supply chain in "${location}, ${country}".
-      - Provide reasoning in "${language}".
-    `;
-
-    const response = await getAIClient().models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: {
-        systemInstruction: "You are the Global Ṣe Ṣe Wá Pricing Expert. Provide fair and accurate market price estimates for handyman tasks in Nigeria.",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            minPrice: { type: Type.INTEGER },
-            maxPrice: { type: Type.INTEGER },
-            currency: { type: Type.STRING },
-            reasoning: { type: Type.STRING },
-            factors: { type: Type.ARRAY, items: { type: Type.STRING } },
-            partsNeeded: { type: Type.ARRAY, items: { type: Type.STRING } },
-            marketNotes: { type: Type.STRING }
-          },
-          required: ["minPrice", "maxPrice", "currency", "reasoning", "factors", "marketNotes"]
-        }
-      }
+    const response = await fetch(`${API_URL}/ai/price-estimation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task, location, country, currency, language })
     });
-
-    return JSON.parse(response.text || "{}");
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status} ${response.statusText}`);
+    }
+    
+    return await response.json();
   } catch (error: any) {
     console.error("Price Estimation Error:", error);
     throw error;
