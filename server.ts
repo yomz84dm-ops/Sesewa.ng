@@ -20,7 +20,9 @@ export async function createApi() {
   
   // Security middlewares
   app.use(helmet({
-    contentSecurityPolicy: false, // Turn off CSP locally to avoid breaking Vite/inline scripts
+    contentSecurityPolicy: {
+      useDefaults: true
+    },
     crossOriginEmbedderPolicy: false // Allows loading external images
   }));
   app.use(express.json({ limit: '10mb' }));
