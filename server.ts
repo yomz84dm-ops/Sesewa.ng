@@ -392,7 +392,7 @@ if (process.env.NODE_ENV !== "test") {
         maxAge: '1y', // Cache static assets for 1 year
         etag: true,
       }));
-      app.get('*', (req, res) => {
+      app.get('*', apiLimiter, (req, res) => {
         // Do not cache the index.html so users always get the latest bundle
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
