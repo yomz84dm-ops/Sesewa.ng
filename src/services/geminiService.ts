@@ -1,16 +1,26 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
-const getAPIKey = () => {
-  const key = process.env.GEMINI_API_KEY || "";
-  if (!key) {
-    console.warn("HandyPadi: GEMINI_API_KEY is not defined in the environment.");
-  }
-  return key;
-};
+let aiInstance: GoogleGenAI | null = null;
 
-const ai = new GoogleGenAI({ 
-  apiKey: getAPIKey()
-});
+const getAIClient = (): GoogleGenAI => {
+  if (!aiInstance) {
+    const key = process.env.GEMINI_API_KEY || "";
+    if (!key) {
+      console.warn("HandyPadi: GEMINI_API_KEY is not defined in the environment.");
+      // We still mock it or provide a dummy string to prevent the app from completely dying?
+      // Wait, GoogleGenAI constructor strictly validates the key if not empty string.
+      // But actually, it throws if the key is empty in the browser!
+      // But wait... actually if we want to bypass it completely, we should just throw an error here,
+      // and catch it where `getAIClient()` is used. But wait! `getAIClient()` is called in the methods later.
+      // Yes, those methods are wrapped in try-catch blocks and they catch the errors!
+      // This is exactly what we want!
+    }
+    aiInstance = new GoogleGenAI({ 
+      apiKey: key || "dummy-key-to-prevent-startup-crash-if-needed"
+    });
+  }
+  return aiInstance;
+};
 
 const translationCache: Record<string, string> = {};
 
@@ -28,7 +38,7 @@ export const geminiService = {
         Identify the top 3 most relevant professionals. Return only their IDs in a JSON array.
       `;
 
-      const response = await ai.models.generateContent({
+      const response = await getAIClient().models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
@@ -60,7 +70,7 @@ export const geminiService = {
         Return ONLY valid JSON: {"isRefined": boolean, "content": string}
       `;
 
-      const response = await ai.models.generateContent({
+      const response = await getAIClient().models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
@@ -90,7 +100,7 @@ export const geminiService = {
     if (reviews.length === 0) return "No reviews yet to summarize.";
     try {
       const prompt = `Summarize these reviews into 3 concise sentences: ${JSON.stringify(reviews.map((r: any) => r.comment))}`;
-      const response = await ai.models.generateContent({
+      const response = await getAIClient().models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
@@ -112,7 +122,7 @@ export const geminiService = {
       console.log("HandyPadi: Analyzing image...");
       const prompt = "Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation.";
 
-      const response = await ai.models.generateContent({
+      const response = await getAIClient().models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
           {
@@ -150,7 +160,7 @@ export const geminiService = {
   async handyPadiChat(message: string, history: any[] = [], currentLanguage: string = 'English') {
     try {
       console.log("HandyPadi: Chatting in language:", currentLanguage);
-      const response = await ai.models.generateContent({
+      const response = await getAIClient().models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
           ...history.map((msg: any) => ({
@@ -203,7 +213,7 @@ export const geminiService = {
         Text to translate: "${text}"`;
       }
 
-      const response = await ai.models.generateContent({
+      const response = await getAIClient().models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
@@ -225,7 +235,7 @@ export const geminiService = {
       const welcomeText = `Welcome to Ṣe Ṣe Wá HandyPadi, your trusted partner for all home services in Nigeria. How can we help you today?`;
       let translatedText = await this.translateText(welcomeText, language);
       
-      const response = await ai.models.generateContent({
+      const response = await getAIClient().models.generateContent({
         model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: `Say cheerfully: ${translatedText}` }] }],
         config: {

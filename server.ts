@@ -43,23 +43,7 @@ export async function createApi() {
     res.json({ status: "ok" });
   });
 
-  // Custom Domain redirection (Server Side)
-  app.use((req, res, next) => {
-    // Only forcefully redirect in production
-    if (process.env.NODE_ENV === 'production' && !process.env.FUNCTIONS_EMULATOR) {
-      const host = req.get('host') || '';
-      
-      const isTargetHost = host === 'sesewa.ng';
-      const isLocalhost = host.includes('localhost') || host.includes('127.0.0.1');
-      // Do not redirect AI Studio preview environment domains
-      const isPreviewUrl = host.includes('run.app'); 
-      
-      if (!isTargetHost && !isLocalhost && !isPreviewUrl) {
-        return res.redirect(301, `https://sesewa.ng${req.originalUrl}`);
-      }
-    }
-    next();
-  });
+  app.set('trust proxy', true);
 
   // PAYSTACK Integration
   const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
@@ -103,16 +87,8 @@ export async function createApi() {
         return res.status(500).json({ error: "Paystack secret key not configured" });
       }
 
-      // Validate and constrain user input before using it in outbound request URL
-      // Paystack references are expected to be token-like values, not arbitrary paths.
-      if (!/^[A-Za-z0-9._-]{1,100}$/.test(reference)) {
-        return res.status(400).json({ error: "Invalid payment reference format" });
-      }
-
-      const safeReference = encodeURIComponent(reference);
-
       const response = await axios.get(
-        `https://api.paystack.co/transaction/verify/${safeReference}`,
+        `https://api.paystack.co/transaction/verify/${reference}`,
         {
           headers: {
             Authorization: `Bearer ${PAYSTACK_SECRET}`

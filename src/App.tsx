@@ -2151,6 +2151,8 @@ export default function App() {
         // Handle dynamic redirection logic
         const host = window.location.hostname.toLowerCase();
         
+        // Disable client-side redirection temporarily due to SSL cert issues on target domains
+        /*
         // 1. Check for explicit redirection rule for current host
         const rule = domainsList.find(d => d.name.toLowerCase() === host);
         if (rule && rule.mode === 'redirect' && rule.target) {
@@ -2188,6 +2190,7 @@ export default function App() {
             return;
           }
         }
+        */
       } catch (err) {
         console.error("Domain logic processing error:", err);
       }

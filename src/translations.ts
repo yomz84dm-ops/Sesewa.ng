@@ -1105,25 +1105,6 @@ export const UI_TRANSLATIONS: Record<string, Record<Language, string>> = {
     'Nupe': 'Malamin gida',
     'Igala': 'Malamin gida',
     'Idoma': 'Malamin gida'
-  },
-  'Safety Tips': {
-    'English': 'Safety Tips',
-    'Pidgin': 'Safety advice',
-    'Yoruba': 'Àwọn Ìmọ̀ràn Àìléwu',
-    'Hausa': 'Shawarwari Tsaro',
-    'Igbo': 'Ndụmọdụ Nchekwa',
-    'Edo': 'Àwọn Ìmọ̀ràn Àìléwu',
-    'Tiv': 'Kwagh u tsaro',
-    'Ibibio': 'Mme item tsaro',
-    'Kanuri': 'Shawarwari Tsaro',
-    'Fulfulde': 'Shawarwari Tsaro',
-    'Efik': 'Mme item tsaro',
-    'Itsekiri': 'Àwọn Ìmọ̀ràn Àìléwu',
-    'Urhobo': 'Kwagh u tsaro',
-    'Izon': 'Mme item tsaro',
-    'Nupe': 'Shawarwari Tsaro',
-    'Igala': 'Shawarwari Tsaro',
-    'Idoma': 'Shawarwari Tsaro'
   }
 };
 

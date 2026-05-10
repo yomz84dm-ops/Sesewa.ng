@@ -1,12 +1,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-const getAPIKey = () => {
-  return process.env.GEMINI_API_KEY || "";
-};
+let aiInstance: GoogleGenAI | null = null;
 
-const ai = new GoogleGenAI({ 
-  apiKey: getAPIKey()
-});
+const getAIClient = (): GoogleGenAI => {
+  if (!aiInstance) {
+    const key = process.env.GEMINI_API_KEY || "";
+    aiInstance = new GoogleGenAI({ 
+      apiKey: key || "dummy-key-to-prevent-startup-crash-if-needed"
+    });
+  }
+  return aiInstance;
+};
 
 export interface PriceEstimation {
   minPrice: number;
@@ -34,7 +38,7 @@ export async function getPriceEstimation(
       - Provide reasoning in "${language}".
     `;
 
-    const response = await ai.models.generateContent({
+    const response = await getAIClient().models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
