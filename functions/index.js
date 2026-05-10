@@ -4,19 +4,10 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 const { GoogleGenAI, Type } = require("@google/genai");
+require("dotenv").config();
 
 const app = express();
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error("Not allowed by CORS"));
-  }
-}));
+app.use(cors({ origin: true }));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
@@ -335,14 +326,8 @@ app.get("/api/paystack/verify/:reference", async (req, res) => {
       return res.status(500).json({ error: "Paystack secret key not configured" });
     }
 
-    if (typeof reference !== "string" || !/^[A-Za-z0-9_-]{6,100}$/.test(reference)) {
-      return res.status(400).json({ error: "Invalid payment reference" });
-    }
-
-    const safeReference = encodeURIComponent(reference);
-
     const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${safeReference}`,
+      `https://api.paystack.co/transaction/verify/${reference}`,
       {
         headers: {
           Authorization: `Bearer ${key}`
