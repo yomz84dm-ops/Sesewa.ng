@@ -127,11 +127,16 @@ if (process.env.NODE_ENV !== "test") {
       // In production (Cloud Run), we serve static files from /dist
       const path = await import("path");
       const distPath = path.join(process.cwd(), 'dist');
+      const staticLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 300, // limit each IP for static/fallback file requests
+        message: { error: "Too many requests, please try again later." }
+      });
       app.use(express.static(distPath, {
         maxAge: '1y', // Cache static assets for 1 year
         etag: true,
       }));
-      app.get('*', (req, res) => {
+      app.get('*', staticLimiter, (req, res) => {
         // Do not cache the index.html so users always get the latest bundle
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
