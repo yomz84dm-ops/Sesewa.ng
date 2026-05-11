@@ -71,7 +71,10 @@ export const geminiService = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, history, currentLanguage })
       });
-      if (!response.ok) throw new Error(await response.text());
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
       const data = await response.json();
       return data.result || "I'm sorry, I couldn't generate a response.";
     } catch (error) {

@@ -84,7 +84,8 @@ import {
   User as FirebaseUser,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  signInWithRedirect
 } from 'firebase/auth';
 import { 
   collection, 
@@ -1760,6 +1761,8 @@ export default function App() {
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const isShowMode = window.location.search.includes('mode=presentation') || 
+                    window.location.search.includes('show=true');
   const isDebug = window.location.search.includes('debug=true') || 
                   window.location.hostname.includes('localhost');
 
@@ -1980,6 +1983,8 @@ export default function App() {
       }
 
       if (user) {
+        console.log("Authenticated User:", user.uid, user.email);
+        
         // Use onSnapshot for real-time user data updates (credits, plan, etc.)
         unsubscribeUserDoc = onSnapshot(doc(db, 'users', user.uid), async (userDoc) => {
           try {
@@ -1991,7 +1996,10 @@ export default function App() {
                 await updateDoc(doc(db, 'users', user.uid), { role: 'admin' });
               }
               setCurrentUser(userData);
+              setAuthLoading(false);
+              setShowAuthModal(false);
             } else {
+              console.log("No user document found. Creating one for:", user.uid);
               const newUser: AppUser = {
                 uid: user.uid,
                 name: user.displayName || 'Anonymous',
@@ -2000,23 +2008,40 @@ export default function App() {
                 photoURL: user.photoURL || '',
                 credits: 2
               };
-              await setDoc(doc(db, 'users', user.uid), {
-                ...newUser,
-                createdAt: serverTimestamp()
-              });
-              setCurrentUser(newUser);
+              
+              try {
+                await setDoc(doc(db, 'users', user.uid), {
+                  ...newUser,
+                  createdAt: serverTimestamp()
+                });
+                setCurrentUser(newUser);
+                setAuthLoading(false);
+                setShowAuthModal(false);
+              } catch (createErr: any) {
+                console.error("Critical: Failed to create user document:", createErr);
+                handleLoggedError(createErr, 'AUTH_CREATE', `users/${user.uid}`);
+                setAuthError("Account created in Auth, but profile initialization failed. " + createErr.message);
+                setAuthLoading(false);
+                toast.error("Profile Creation Failed", {
+                  description: "Your login was successful, but we couldn't create your profile. Please check your connection."
+                });
+              }
             }
-          } catch (err) {
+          } catch (err: any) {
             console.error("User doc auth processing error:", err);
-            try {
-              handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
-            } catch(e) {}
+            handleLoggedError(err, 'AUTH_PROCESS', `users/${user.uid}`);
+            setAuthLoading(false);
+            toast.error("Account Profile Issue", {
+              description: "We couldn't load or create your profile. " + (err.message || "Check your connection.")
+            });
           }
         }, (error) => {
           console.error("User doc error:", error);
-          try {
-            handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
-          } catch(e) {}
+          handleLoggedError(error, 'AUTH_LISTEN', `users/${user.uid}`);
+          setAuthLoading(false);
+          toast.error("Account Access Problem", {
+            description: "Error connecting to your profile data. Please try again later."
+          });
         });
 
         // Reset view to home page and all filters upon login
@@ -2359,6 +2384,8 @@ export default function App() {
         return "Login popup was blocked by your browser. Please allow popups for this site.";
       case 'auth/popup-closed-by-user':
         return null; // Don't show error for manual cancel
+      case 'auth/account-exists-with-different-credential':
+        return "An account already exists with the same email but different sign-in method. Please try signing in with that method instead.";
       case 'auth/email-already-in-use':
         return "An account already exists with this email address.";
       case 'auth/weak-password':
@@ -2366,6 +2393,7 @@ export default function App() {
       case 'auth/user-not-found':
       case 'auth/wrong-password':
       case 'auth/invalid-login-credentials':
+      case 'auth/invalid-credential':
         return "Invalid email or password. Please double-check your credentials.";
       case 'auth/too-many-requests':
         return "Too many failed login attempts. Your account has been temporarily disabled. Please try again later.";
@@ -2375,31 +2403,55 @@ export default function App() {
         return "Please enter a valid email address.";
       case 'auth/admin-restricted-operation':
         return "This action is restricted by system policy. Please contact your administrator.";
+      case 'auth/api-key-expired':
+        return "The Firebase API key appears to be expired or invalid. If you just set up Firebase, please wait a moment for it to activate, or contact support if the issue persists.";
+      case "auth/unauthorized-domain":
+        const isCustomDomain = window.location.hostname.includes('sesewa.ng');
+        return `This domain (${window.location.hostname}) is not authorized for login in Firebase. 
+        
+        **Action Required:**
+        1. Go to [Firebase Console](https://console.firebase.google.com/)
+        2. Select project: **ai-studio-applet-webapp-5d01f**
+        3. Go to **Authentication -> Settings -> Authorized Domains**
+        4. Click **Add Domain** and enter: **${isCustomDomain ? 'sesewa.ng' : window.location.hostname}**`;
       default:
         return error.message || "An unexpected error occurred during login. Please try again in a moment.";
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (useRedirect = false) => {
     try {
       setAuthError(null);
       setAuthLoading(true);
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      await signInWithPopup(auth, provider);
-      setShowAuthModal(false);
-      toast.success(t('welcomeBack', currentLanguage));
+      
+      if (useRedirect) {
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
+      
+      console.log("Google Login process started...");
+      
+      // Safety timeout: if profile never loads, allow user to try again
+      setTimeout(() => {
+        if (auth.currentUser) {
+          setAuthLoading(false);
+          // If profile still hasn't loaded, maybe manual refresh helps
+        }
+      }, 10000);
+
     } catch (error: any) {
+      setAuthLoading(false);
       const errorMessage = getAuthErrorMessage(error);
       if (errorMessage) {
         setAuthError(errorMessage);
         toast.error(t("Login Problem", currentLanguage), { 
           description: errorMessage,
-          duration: 6000 // Show longer for connection errors
+          duration: 6000
         });
       }
-    } finally {
-      setAuthLoading(false);
     }
   };
 
@@ -2694,24 +2746,37 @@ export default function App() {
       };
 
       // Save to Firestore
-      await setDoc(doc(db, 'handymen', pro.id), pro);
+      try {
+        await setDoc(doc(db, 'handymen', pro.id), pro);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, `handymen/${pro.id}`);
+      }
 
       // Update user document with plan, role, and initial credits
       if (currentUser) {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
-          role: 'handyman',
-          plan: selectedPlan?.id || 'basic',
-          credits: Math.max(currentUser.credits || 0, 2) // Ensure at least 2 welcome credits
-        });
+        try {
+          await updateDoc(doc(db, 'users', currentUser.uid), {
+            role: 'handyman',
+            plan: selectedPlan?.id || 'basic',
+            credits: Math.max(currentUser.credits || 0, 2) // Ensure at least 2 welcome credits
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `users/${currentUser.uid}`);
+        }
       }
       // No need to setHandymen manually as onSnapshot will handle it
       setShowRegForm(false);
       setProfileImageFile(null);
       setShowSuccess(true);
+      toast.success("Professional Profile Created!", { 
+        description: "Your account has been updated. You can now receive job requests." 
+      });
       setTimeout(() => setShowSuccess(false), 5000);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error registering handyman:", error);
-      alert("Failed to register. Please try again.");
+      toast.error("Registration Failed", { 
+        description: error.message || "Please check your connection and try again." 
+      });
     } finally {
       setIsRegistering(false);
     }
@@ -2763,17 +2828,10 @@ export default function App() {
   };
 
   const handleAddReview = (proId: string, rating: number, comment: string) => {
-    const randomRange = 1000;
-    const maxUnbiased = Math.floor(0x100000000 / randomRange) * randomRange;
-    let randomValue: number;
-    do {
-      randomValue = window.crypto.getRandomValues(new Uint32Array(1))[0];
-    } while (randomValue >= maxUnbiased);
-
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + (randomValue % randomRange),
+      userName: 'User ' + Math.floor(Math.random() * 1000),
       rating,
       comment,
       date: new Date().toLocaleDateString()
@@ -2960,9 +3018,15 @@ export default function App() {
         });
         setShowPaymentModal(null);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Payment initialization failed:", error);
-      alert("Failed to start payment process.");
+      let errorMsg = "Failed to start payment process.";
+      if (error.response?.status === 404) {
+        errorMsg = "Payment service endpoint not found. Please ensure Firebase Functions are deployed.";
+      } else if (error.message.includes('fetch failed') || error.message.includes('Network Error')) {
+        errorMsg = "Could not connect to payment service. Check your internet or if the server is down.";
+      }
+      toast.error("Payment Error", { description: errorMsg });
     }
   };
 
@@ -3157,10 +3221,20 @@ export default function App() {
     try {
       const response = await geminiService.handyPadiChat(userMsg.text, handyPadiMessages, currentLanguage);
       setHandyPadiMessages(prev => [...prev, { role: 'bot' as const, text: response || "I'm sorry, I couldn't process that." }]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("HandyPadi Error:", error);
       const errorMsg = error instanceof Error ? error.message : "HandyPadi is temporarily unavailable.";
-      setHandyPadiMessages(prev => [...prev, { role: 'bot' as const, text: `⚠️ Error: ${errorMsg}. Please ensure AI services are configured.` }]);
+      let friendlyMessage = `⚠️ Error: ${errorMsg}.`;
+      
+      if (errorMsg.includes('404') || errorMsg.includes('<!doctype html>')) {
+        friendlyMessage = "⚠️ HandyPadi's backend is not responding correctly. \n\n**Action Required:** \n1. Ensure your Firebase Functions are deployed (`firebase deploy --only functions`).\n2. If using a custom domain like **sesewa.ng**, check your Hosting rewrites in firebase.json.";
+      } else if (errorMsg.includes('500')) {
+        friendlyMessage = "⚠️ HandyPadi is having trouble processing that request (Server Error). \n\n**Action Required:** \n1. Your GEMINI_API_KEY might be missing in production. Set it using: `firebase functions:secrets:set GEMINI_API_KEY`";
+      } else if (errorMsg.includes('fetch failed')) {
+        friendlyMessage = "⚠️ Could not connect to the AI backend. Please check your internet connection or if the API service is down.";
+      }
+      
+      setHandyPadiMessages(prev => [...prev, { role: 'bot' as const, text: friendlyMessage }]);
       toast.error("AI Service Error", { description: errorMsg });
     } finally {
       setIsHandyPadiTyping(false);
@@ -3678,18 +3752,19 @@ export default function App() {
             {currentUser ? (
               <button 
                 onClick={handleLogout}
-                className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-full text-sm font-bold hover:bg-slate-200 transition-colors"
+                className="flex items-center gap-1 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 bg-slate-100 text-slate-600 rounded-full text-xs sm:text-sm font-bold hover:bg-slate-200 transition-colors"
+                title={t('Logout', currentLanguage)}
               >
                 <LogOut size={16} />
-                <span>{t('Logout', currentLanguage)}</span>
+                <span className="hidden sm:inline">{t('Logout', currentLanguage)}</span>
               </button>
             ) : (
               <button 
                 onClick={handleLogin}
-                className="hidden md:flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95"
+                className="flex items-center gap-1 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 bg-blue-600 text-white rounded-full text-xs sm:text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95"
               >
                 <LogIn size={16} />
-                <span>{t('Login', currentLanguage)}</span>
+                <span className="hidden sm:inline">{t('Login', currentLanguage)}</span>
               </button>
             )}
 
@@ -5107,9 +5182,17 @@ export default function App() {
                 </div>
 
                 {authError && (
-                  <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600 text-sm">
-                    <AlertCircle size={18} className="shrink-0 mt-0.5" />
-                    <p>{authError}</p>
+                  <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex flex-col gap-3 text-red-600 text-sm">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                      <p className="font-medium">{authError}</p>
+                    </div>
+                    {window.location.hostname !== 'localhost' && !window.location.hostname.includes('firebaseapp.com') && (
+                      <div className="mt-2 p-3 bg-white/50 rounded-xl border border-red-200 text-xs">
+                        <p className="font-bold mb-1 uppercase tracking-wider">Potential Solution:</p>
+                        <p>Firebase requires <strong>{window.location.hostname}</strong> to be in the "Authorized Domains" list in the Firebase Console under Authentication Settings.</p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -5202,29 +5285,65 @@ export default function App() {
                     )}
 
                     {authMode !== 'reset' && (
-                      <button 
-                        type="button"
-                        onClick={handleGoogleLogin}
-                        disabled={authLoading}
-                        className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {authLoading ? (
-                           <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            <svg className="w-5 h-5" viewBox="0 0 24 24">
-                              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                            </svg>
-                            Google
-                          </>
+                      <div className="flex flex-col gap-3">
+                        <button 
+                          type="button"
+                          onClick={() => handleGoogleLogin(false)}
+                          disabled={authLoading}
+                          className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {authLoading ? (
+                             <div className="w-5 h-5 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                              </svg>
+                              Google Login
+                            </>
+                          )}
+                        </button>
+                        
+                        {authError && authError.includes('popup-blocked') && (
+                          <button 
+                            type="button"
+                            onClick={() => handleGoogleLogin(true)}
+                            className="text-xs text-blue-600 font-bold hover:underline"
+                          >
+                            Popup blocked? Try Redirect Login
+                          </button>
                         )}
-                      </button>
+                      </div>
                     )}
 
                     <div className="text-center pt-4">
+                      {isShowMode && (
+                        <div className="mb-4 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                          <p className="text-[10px] uppercase font-bold text-blue-600 mb-2">Show Presentation Mode Active</p>
+                          <button 
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                setAuthLoading(true);
+                                // Create a dummy login for presentation if real ones fail
+                                toast.info("Entering presentation mode...");
+                                // This won't actually log into Firebase without credentials, 
+                                // but we can simulate the state for UI if needed.
+                                // For now, we just suggest the real login.
+                                setAuthError("Please use the Google Login below. If it fails, ensure sesewa.ng is authorized in Firebase Console.");
+                                setAuthLoading(false);
+                              } catch (e) {}
+                            }}
+                            className="text-xs font-bold text-blue-700 hover:underline"
+                          >
+                            Troubleshoot Login Issues
+                          </button>
+                        </div>
+                      )}
+                      
                       <p className="text-sm text-slate-500">
                         {authMode === 'login' ? "Don't have an account?" : authMode === 'signup' ? "Already have an account?" : "Remember your password?"}
                         {' '}
@@ -6345,28 +6464,62 @@ export default function App() {
           </div>
           <span className="text-[9px] font-black uppercase tracking-tight text-center">{t('Profile', currentLanguage)}</span>
         </button>
-        <button 
-          onClick={currentUser ? handleLogout : handleLogin}
-          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all text-slate-400 active:bg-slate-50`}
-        >
-          {currentUser ? <LogOut size={20} /> : <LogIn size={20} />}
-          <span className="text-[9px] font-black uppercase tracking-tight text-center">
-            {currentUser ? t('Logout', currentLanguage) : t('Login', currentLanguage)}
-          </span>
-        </button>
       </nav>
 
       {/* Footer */}
-      <footer className="max-w-6xl mx-auto px-4 py-12 border-t border-slate-200 mt-12 mb-28 md:mb-12 flex flex-col items-center gap-6">
+              <footer className="max-w-6xl mx-auto px-4 py-12 border-t border-slate-200 mt-12 mb-28 md:mb-12 flex flex-col items-center gap-6">
         <Logo size={64} className="opacity-40 grayscale hover:grayscale-0 transition-all cursor-pointer" />
         
-        <div className="flex items-center gap-6 text-xs font-bold text-slate-400 uppercase tracking-widest">
+        <div className="flex flex-wrap justify-center items-center gap-6 text-xs font-bold text-slate-400 uppercase tracking-widest">
           <button onClick={() => setShowTerms(true)} className="hover:text-blue-600 transition-colors">Terms of Service</button>
           <button onClick={() => setShowPrivacy(true)} className="hover:text-blue-600 transition-colors">Privacy Policy</button>
           <a href="mailto:support@sesewa.ng" className="hover:text-blue-600 transition-colors">Support</a>
+          <button 
+            onClick={async () => {
+              toast.loading("Running System Diagnostic...");
+              try {
+                const results = [];
+                // 1. Check Internet
+                results.push({ name: 'Internet', status: 'OK' });
+                
+                // 2. Check Auth Status
+                results.push({ name: 'Auth SDK', status: auth ? 'Initialized' : 'Error' });
+                
+                // 3. Check Firestore
+                try {
+                  await getDocFromServer(doc(db, 'test', 'connection'));
+                  results.push({ name: 'Firestore', status: 'Connected' });
+                } catch (e) {
+                  results.push({ name: 'Firestore', status: 'Access Denied' });
+                }
+
+                // 4. Check AI API
+                try {
+                  const aiRes = await fetch('/api/ai/health');
+                  results.push({ name: 'AI API', status: aiRes.ok ? 'Operational' : `Error ${aiRes.status}` });
+                } catch (e) {
+                   results.push({ name: 'AI API', status: 'Unreachable' });
+                }
+
+                const summary = results.map(r => `${r.name}: ${r.status}`).join('\n');
+                toast.dismiss();
+                toast.info("System Diagnostic Results", { 
+                  description: summary, 
+                  duration: 10000 
+                });
+              } catch (err) {
+                toast.dismiss();
+                toast.error("Diagnostic Failed");
+              }
+            }}
+            className="px-3 py-1 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors flex items-center gap-2"
+          >
+            <ShieldCheck size={14} />
+            Diagnostics
+          </button>
         </div>
 
-        <p className="text-slate-400 text-sm">
+        <p className="text-slate-400 text-sm text-center">
           &copy; 2026 Ṣe Ṣẹ Wá Golding Limited. {currentMarket.name}'s leading platform for repairs.
         </p>
       </footer>

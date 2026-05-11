@@ -7,23 +7,7 @@ const { GoogleGenAI, Type } = require("@google/genai");
 require("dotenv").config();
 
 const app = express();
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000,http://localhost:5173")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
-
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow non-browser/server-to-server requests without Origin header
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(new Error("Not allowed by CORS"));
-  }
-}));
+app.use(cors({ origin: true }));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
@@ -46,6 +30,16 @@ const getAIClient = () => {
 };
 
 // AI Routes
+
+app.get("/api/ai/debug", (req, res) => {
+  const key = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  res.json({
+    has_key: !!key,
+    key_prefix: key ? key.substring(0, 5) : "none",
+    node_env: process.env.NODE_ENV,
+    function_region: process.env.FUNCTION_REGION || "unknown"
+  });
+});
 
 app.post("/api/ai/match-handymen", async (req, res) => {
   try {
@@ -342,13 +336,8 @@ app.get("/api/paystack/verify/:reference", async (req, res) => {
       return res.status(500).json({ error: "Paystack secret key not configured" });
     }
 
-    if (typeof reference !== "string" || !/^[A-Za-z0-9._-]{1,100}$/.test(reference)) {
-      return res.status(400).json({ error: "Invalid payment reference" });
-    }
-
-    const safeReference = encodeURIComponent(reference);
     const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${safeReference}`,
+      `https://api.paystack.co/transaction/verify/${reference}`,
       {
         headers: {
           Authorization: `Bearer ${key}`
