@@ -206,6 +206,7 @@ interface AppUser {
   role: 'user' | 'handyman' | 'admin';
   photoURL?: string;
   phone?: string;
+  identityNumber?: string;
   plan?: 'basic' | 'pro' | 'member';
   credits?: number;
   isVerifiedPending?: boolean;
@@ -1749,6 +1750,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'reset'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authNinBvn, setAuthNinBvn] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
@@ -2009,11 +2011,17 @@ export default function App() {
                 credits: 2
               };
               
+              const userPayload = {
+                ...newUser,
+                createdAt: serverTimestamp()
+              };
+              
+              if (authNinBvn && authNinBvn.length === 11) {
+                (userPayload as any).identityNumber = authNinBvn;
+              }
+              
               try {
-                await setDoc(doc(db, 'users', user.uid), {
-                  ...newUser,
-                  createdAt: serverTimestamp()
-                });
+                await setDoc(doc(db, 'users', user.uid), userPayload);
                 setCurrentUser(newUser);
                 setAuthLoading(false);
                 setShowAuthModal(false);
@@ -2420,6 +2428,13 @@ export default function App() {
   };
 
   const handleGoogleLogin = async (useRedirect = false) => {
+    if (authMode === 'signup') {
+      if (!authNinBvn || !/^\d{11}$/.test(authNinBvn)) {
+        setAuthError('Please enter a valid 11-digit NIN or BVN to register with Google.');
+        return;
+      }
+    }
+
     try {
       setAuthError(null);
       setAuthLoading(true);
@@ -2474,6 +2489,11 @@ export default function App() {
         setShowAuthModal(false);
         toast.success(t('welcomeBack', currentLanguage));
       } else if (authMode === 'signup') {
+        if (!authNinBvn || !/^\d{11}$/.test(authNinBvn)) {
+          setAuthLoading(false);
+          setAuthError('Please enter a valid 11-digit NIN or BVN to register.');
+          return;
+        }
         await createUserWithEmailAndPassword(auth, authEmail, authPassword);
         setShowAuthModal(false);
         toast.success(t('accountCreated', currentLanguage));
@@ -3452,7 +3472,38 @@ export default function App() {
     }
 
     return (
-      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans overflow-x-hidden">
+      <div className="min-h-screen bg-slate-50 text-slate-900 font-sans overflow-x-hidden relative">
+        {/* Ambient Animated Background */}
+        <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden" aria-hidden="true">
+          <motion.div 
+            animate={{ 
+              x: [0, 50, 0], 
+              y: [0, -50, 0],
+              scale: [1, 1.1, 1] 
+            }}
+            transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+            className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-blue-100/50 blur-3xl opacity-50"
+          />
+          <motion.div 
+            animate={{ 
+              x: [0, -50, 0], 
+              y: [0, 50, 0],
+              scale: [1, 1.2, 1] 
+            }}
+            transition={{ duration: 20, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+            className="absolute top-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-emerald-100/40 blur-3xl opacity-50"
+          />
+          <motion.div 
+            animate={{ 
+              x: [0, 30, 0], 
+              y: [0, -30, 0]
+            }}
+            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut", delay: 4 }}
+            className="absolute -bottom-[20%] left-[20%] w-[60%] h-[60%] rounded-full bg-purple-100/40 blur-3xl opacity-50"
+          />
+        </div>
+        
+        <div className="relative z-10 w-full">
       {/* Success Message */}
       <AnimatePresence>
         {showSuccess && (
@@ -3593,7 +3644,12 @@ export default function App() {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50 w-full shadow-sm">
+      <motion.header 
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="bg-white/70 backdrop-blur-2xl border-b border-white/50 sticky top-0 z-50 w-full shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)]"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-4">
           
           {/* Logo Section */}
@@ -3768,9 +3824,9 @@ export default function App() {
               </button>
             )}
 
-            <button 
-              onClick={() => {
-                if (currentUser) {
+            {currentUser && (
+              <button 
+                onClick={() => {
                   if (myProProfile) {
                     setShowEditProfile(!showEditProfile);
                     setShowUserProfileModal(false);
@@ -3778,29 +3834,27 @@ export default function App() {
                     setShowUserProfileModal(!showUserProfileModal);
                     setShowEditProfile(false);
                   }
-                } else {
-                  handleLogin();
-                }
-                setShowRequests(false);
-                setShowPricing(false);
-                setShowChatList(false);
-                setShowAdminDashboard(false);
-              }}
-              className={`p-0.5 rounded-full transition-all border-2 hidden md:block ${
-                (showEditProfile || showUserProfileModal) ? 'border-blue-600 scale-110 shadow-lg shadow-blue-600/20' : 'border-transparent hover:border-slate-300'
-              }`}
-            >
-              <div className="w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
-                {currentUser?.photoURL ? (
-                  <img referrerPolicy="no-referrer" src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <User size={20} className="text-slate-400" />
-                )}
-              </div>
-            </button>
+                  setShowRequests(false);
+                  setShowPricing(false);
+                  setShowChatList(false);
+                  setShowAdminDashboard(false);
+                }}
+                className={`p-0.5 rounded-full transition-all border-2 hidden md:block ${
+                  (showEditProfile || showUserProfileModal) ? 'border-blue-600 scale-110 shadow-lg shadow-blue-600/20' : 'border-transparent hover:border-slate-300'
+                }`}
+              >
+                <div className="w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
+                  {currentUser?.photoURL ? (
+                    <img referrerPolicy="no-referrer" src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="font-bold text-slate-500 uppercase">{currentUser?.name.charAt(0)}</span>
+                  )}
+                </div>
+              </button>
+            )}
           </div>
         </div>
-      </header>
+      </motion.header>
 
       <main className="max-w-6xl mx-auto px-4 py-8 pb-24 md:pb-8">
         {showPricing ? (
@@ -4328,21 +4382,47 @@ export default function App() {
                 <input 
                   type="text"
                   placeholder={t('Search by name or Location', currentLanguage)}
-                  className="w-full pl-14 pr-12 py-5 bg-transparent rounded-full focus:outline-none text-slate-900 font-bold placeholder:text-slate-300 text-sm sm:text-lg"
+                  className="w-full pl-14 pr-24 sm:pr-32 py-5 bg-transparent rounded-full focus:outline-none text-slate-900 font-bold placeholder:text-slate-300 text-sm sm:text-lg"
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
                     handleSmartMatch(e.target.value);
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                      document.getElementById('handyman-list')?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
                 />
-                {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-slate-200 hover:text-slate-400"
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  {searchQuery && (
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="p-2 text-slate-200 hover:text-slate-400 focus:outline-none"
+                    >
+                      <X size={18} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      document.activeElement?.blur();
+                      document.getElementById('handyman-list')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="hidden sm:flex items-center justify-center bg-blue-600 text-white rounded-full px-5 py-2.5 font-bold text-sm tracking-wide shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all"
                   >
-                    <X size={18} />
+                    Go
                   </button>
-                )}
+                  <button
+                    onClick={() => {
+                      document.activeElement?.blur();
+                      document.getElementById('handyman-list')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="sm:hidden flex items-center justify-center p-3 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-600/20 hover:bg-blue-700 active:scale-95 transition-all"
+                  >
+                    <Search size={16} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-1 sm:gap-2 p-1">
@@ -4694,17 +4774,34 @@ export default function App() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-24">
+          <motion.div 
+            initial="hidden"
+            animate="show"
+            variants={{
+              hidden: { opacity: 0 },
+              show: {
+                opacity: 1,
+                transition: {
+                  staggerChildren: 0.1
+                }
+              }
+            }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-24"
+          >
             <AnimatePresence mode="popLayout">
               {filteredHandymen.map((handy) => (
                 <motion.div
                   layout
                   key={handy.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
+                  variants={{
+                    hidden: { opacity: 0, scale: 0.9, y: 30 },
+                    show: { opacity: 1, scale: 1, y: 0 }
+                  }}
+                  whileHover={{ y: -5, scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
                   onClick={() => setSelectedPro(handy)}
-                  className="bg-white border border-slate-200 p-5 rounded-2xl hover:shadow-md transition-shadow group cursor-pointer"
+                  className="bg-white/80 backdrop-blur-sm border border-slate-100 p-5 rounded-[2rem] shadow-sm hover:shadow-xl hover:shadow-blue-500/5 hover:border-blue-100 transition-all group cursor-pointer"
                 >
                   <div className={`flex flex-col gap-4 ${
                     handy.verified && currentUser?.plan !== 'member' && currentUser?.role !== 'handyman' ? 'opacity-50 grayscale' : ''
@@ -4832,7 +4929,7 @@ export default function App() {
             </AnimatePresence>
 
             {filteredHandymen.length === 0 && (
-              <div className="text-center py-20 bg-white border border-dashed border-slate-200 rounded-3xl">
+              <div className="md:col-span-2 text-center py-20 bg-white/50 backdrop-blur-sm border border-dashed border-slate-200 rounded-3xl">
                 <Search size={48} className="mx-auto text-slate-200 mb-4" />
                 <p className="text-slate-400">No handymen found matching your search.</p>
                 <button 
@@ -4843,7 +4940,7 @@ export default function App() {
                 </button>
               </div>
             )}
-          </div>
+          </motion.div>
         </section>
         </>
       )}
@@ -5258,6 +5355,27 @@ export default function App() {
                             onChange={(e) => setAuthPassword(e.target.value)}
                           />
                         </div>
+                      </div>
+                    )}
+
+                    {authMode === 'signup' && (
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className="block text-sm font-semibold text-slate-700">National ID (NIN) or BVN</label>
+                        </div>
+                        <div className="relative">
+                          <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                          <input 
+                            type="text"
+                            required
+                            maxLength={11}
+                            className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                            placeholder="11-digit NIN or BVN required"
+                            value={authNinBvn}
+                            onChange={(e) => setAuthNinBvn(e.target.value.replace(/\D/g, ''))}
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1.5 ml-1">We require this to verify your identity. Your data is secure.</p>
                       </div>
                     )}
 
@@ -6376,19 +6494,21 @@ export default function App() {
       </AnimatePresence>
 
       {/* Modern Fixed Bottom Navigation for Mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/80 backdrop-blur-2xl border-t border-slate-100 px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.08)]">
-        <button 
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/90 backdrop-blur-3xl border-t border-slate-100 px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around shadow-[0_-20px_40px_-20px_rgba(0,0,0,0.1)]">
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
           onClick={handleGoHome}
           className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${
             (!showPricing && !showRequests && !showChatList && !showUserProfileModal && !showEditProfile && !showAdminDashboard) 
-            ? 'text-blue-600 bg-blue-50/50' 
+            ? 'text-blue-600 bg-blue-50/80 shadow-inner' 
             : 'text-slate-400 active:bg-slate-50'
           }`}
         >
           <Home size={20} className={(!showPricing && !showRequests && !showChatList && !showUserProfileModal && !showEditProfile && !showAdminDashboard) ? "fill-current" : ""} />
           <span className="text-[9px] font-black uppercase tracking-tight">{t('Home', currentLanguage)}</span>
-        </button>
-        <button 
+        </motion.button>
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
           onClick={() => {
             setShowRequests(true);
             setShowPricing(false);
@@ -6397,12 +6517,13 @@ export default function App() {
             setShowEditProfile(false);
             setShowUserProfileModal(false);
           }}
-          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${showRequests ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 active:bg-slate-50'}`}
+          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${showRequests ? 'text-blue-600 bg-blue-50/80 shadow-inner' : 'text-slate-400 active:bg-slate-50'}`}
         >
           <Clock size={20} />
           <span className="text-[9px] font-black uppercase tracking-tight">{t('My Requests', currentLanguage)}</span>
-        </button>
-        <button 
+        </motion.button>
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
           onClick={() => {
             setShowChatList(true);
             setShowRequests(false);
@@ -6411,17 +6532,22 @@ export default function App() {
             setShowEditProfile(false);
             setShowUserProfileModal(false);
           }}
-          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all relative ${showChatList ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 active:bg-slate-50'}`}
+          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all relative ${showChatList ? 'text-blue-600 bg-blue-50/80 shadow-inner' : 'text-slate-400 active:bg-slate-50'}`}
         >
           <MessageCircle size={20} />
           <span className="text-[9px] font-black uppercase tracking-tight">{t('Messages', currentLanguage)}</span>
           {chats.length > 0 && (
-            <span className="absolute top-1 right-2 bg-red-500 text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-black border-2 border-white">
+            <motion.span 
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="absolute top-1 right-2 bg-red-500 text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-black border-2 border-white shadow-sm"
+            >
               {chats.length}
-            </span>
+            </motion.span>
           )}
-        </button>
-        <button 
+        </motion.button>
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
           onClick={() => {
             setShowPricing(true);
             setShowRequests(false);
@@ -6430,14 +6556,15 @@ export default function App() {
             setShowEditProfile(false);
             setShowUserProfileModal(false);
           }}
-          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${showPricing ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 active:bg-slate-50'}`}
+          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${showPricing ? 'text-blue-600 bg-blue-50/80 shadow-inner' : 'text-slate-400 active:bg-slate-50'}`}
         >
           <CreditCard size={20} />
           <span className="text-[9px] font-black uppercase tracking-tight">{t('Pricing', currentLanguage)}</span>
-        </button>
-        <button 
-          onClick={() => {
-            if (currentUser) {
+        </motion.button>
+        {currentUser && (
+          <motion.button 
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
               if (myProProfile) {
                 setShowEditProfile(!showEditProfile);
                 setShowUserProfileModal(false);
@@ -6445,25 +6572,19 @@ export default function App() {
                 setShowUserProfileModal(!showUserProfileModal);
                 setShowEditProfile(false);
               }
-            } else {
-              handleLogin();
-            }
-            setShowRequests(false);
-            setShowPricing(false);
-            setShowChatList(false);
-            setShowAdminDashboard(false);
-          }}
-          className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${(showEditProfile || showUserProfileModal) ? 'text-blue-600 bg-blue-50/50' : 'text-slate-400 active:bg-slate-50'}`}
-        >
-          <div className={`w-5 h-5 rounded-full overflow-hidden border ${ (showEditProfile || showUserProfileModal) ? 'border-blue-600' : 'border-slate-300'}`}>
-            {currentUser?.photoURL ? (
-              <img referrerPolicy="no-referrer" src={currentUser.photoURL} alt="P" className="w-full h-full object-cover" />
-            ) : (
-              <User size={14} className="m-auto" />
-            )}
-          </div>
-          <span className="text-[9px] font-black uppercase tracking-tight text-center">{t('Profile', currentLanguage)}</span>
-        </button>
+              setShowRequests(false);
+              setShowPricing(false);
+              setShowChatList(false);
+              setShowAdminDashboard(false);
+            }}
+            className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${(showEditProfile || showUserProfileModal) ? 'text-blue-600 bg-blue-50/80 shadow-inner' : 'text-slate-400 active:bg-slate-50'}`}
+          >
+            <div className={`w-5 h-5 rounded-full overflow-hidden border ${ (showEditProfile || showUserProfileModal) ? 'border-blue-600' : 'border-slate-300'}`}>
+              <img referrerPolicy="no-referrer" src={currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=random`} alt="Profile" className="w-full h-full object-cover" />
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-tight text-center">{t('Profile', currentLanguage)}</span>
+          </motion.button>
+        )}
       </nav>
 
       {/* Footer */}
@@ -6894,6 +7015,7 @@ export default function App() {
           {handyPadiOpen ? <X size={24} className="text-slate-600" /> : <Logo size={40} />}
         </button>
         <Toaster position="top-right" richColors />
+      </div>
       </div>
       </div>
     );
