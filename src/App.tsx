@@ -2850,10 +2850,11 @@ export default function App() {
   };
 
   const handleAddReview = (proId: string, rating: number, comment: string) => {
+    const randomSuffix = crypto.getRandomValues(new Uint32Array(1))[0] % 1000;
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + Math.floor(Math.random() * 1000),
+      userName: 'User ' + randomSuffix,
       rating,
       comment,
       date: new Date().toLocaleDateString()
