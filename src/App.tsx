@@ -2849,8 +2849,27 @@ export default function App() {
     }
   };
 
+  const getSecureRandomInt = (maxExclusive: number): number => {
+    if (!Number.isInteger(maxExclusive) || maxExclusive <= 0 || maxExclusive > 0x100000000) {
+      throw new Error('maxExclusive must be a positive integer <= 2^32');
+    }
+
+    const maxUint32PlusOne = 0x100000000; // 2^32
+    const limit = Math.floor(maxUint32PlusOne / maxExclusive) * maxUint32PlusOne / (maxUint32PlusOne / maxUint32PlusOne);
+    const unbiasedLimit = Math.floor(maxUint32PlusOne / maxExclusive) * maxExclusive;
+    const randomBuffer = new Uint32Array(1);
+
+    while (true) {
+      crypto.getRandomValues(randomBuffer);
+      const value = randomBuffer[0];
+      if (value < unbiasedLimit) {
+        return value % maxExclusive;
+      }
+    }
+  };
+
   const handleAddReview = (proId: string, rating: number, comment: string) => {
-    const randomSuffix = crypto.getRandomValues(new Uint32Array(1))[0] % 1000;
+    const randomSuffix = getSecureRandomInt(1000);
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
