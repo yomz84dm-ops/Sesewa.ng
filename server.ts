@@ -360,12 +360,18 @@ export async function createApi() {
     try {
       const { reference } = req.params;
 
+      // Validate reference to prevent request forgery/path manipulation in outbound URL
+      // Paystack references are typically alphanumeric with safe separators.
+      if (typeof reference !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(reference)) {
+        return res.status(400).json({ error: "Invalid payment reference" });
+      }
+
       if (!PAYSTACK_SECRET) {
         return res.status(500).json({ error: "Paystack secret key not configured" });
       }
 
       const response = await axios.get(
-        `https://api.paystack.co/transaction/verify/${reference}`,
+        `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
         {
           headers: {
             Authorization: `Bearer ${PAYSTACK_SECRET}`
