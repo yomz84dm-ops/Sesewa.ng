@@ -4,7 +4,12 @@ import axios from "axios";
 import dotenv from "dotenv";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import path from "path";
+import { fileURLToPath } from "url";
 import { GoogleGenAI, Type } from "@google/genai";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -251,8 +256,10 @@ export async function createApi() {
   });
 
   app.post("/api/ai/speak-welcome", async (req, res) => {
+    console.log("[DEBUG] Received request for /api/ai/speak-welcome");
     try {
       const { text } = req.body;
+      console.log("[DEBUG] Generating TTS for text:", text);
       const response = await getAIClient().models.generateContent({
         model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: `Say cheerfully: ${text}` }] }],
@@ -265,7 +272,9 @@ export async function createApi() {
           },
         }
       });
+      console.log("[DEBUG] Gemini Response received");
       const audioData = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData)?.inlineData?.data;
+      console.log("[DEBUG] Audio data extracted:", audioData ? "Yes (length: " + audioData.length + ")" : "No");
       res.json({ audioData: audioData || null });
     } catch (error: any) {
       console.error("Speak Welcome Error:", error.message);
@@ -386,7 +395,6 @@ if (process.env.NODE_ENV !== "test") {
       app.use(vite.middlewares);
     } else {
       // In production (Cloud Run), we serve static files from /dist
-      const path = await import("path");
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath, {
         maxAge: '1y', // Cache static assets for 1 year

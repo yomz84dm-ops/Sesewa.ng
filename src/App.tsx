@@ -1345,13 +1345,15 @@ const VoiceWelcome = ({ lang }: { lang: string }) => {
 
   const fetchAudio = async () => {
     try {
-      console.log(`Fetching audio for language: ${lang}`);
+      const url = `${import.meta.env.VITE_API_URL || '/api'}/ai/speak-welcome`;
+      console.log(`[DEBUG] fetchAudio starting. URL: ${url}, lang: ${lang}`);
       const base64Audio = await geminiService.speakWelcome(lang);
       if (!base64Audio) {
-        console.warn("No audio data returned from AI service");
+        console.warn("[DEBUG] No audio data returned from AI service");
         setIsLoading(false);
         return;
       }
+      console.log(`[DEBUG] fetchAudio success. Audio data length: ${base64Audio.length}`);
 
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
@@ -4702,11 +4704,22 @@ export default function App() {
             </motion.div>
           )}
 
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <h3 className="font-semibold text-slate-700">
-                {filteredHandymen.length} Professionals Found
-              </h3>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-y-6 gap-x-8 mb-10 mt-6 overflow-hidden">
+            <div className="flex items-center gap-4 shrink-0 px-1">
+              <div className="flex items-baseline gap-2 group">
+                <span className="text-4xl md:text-5xl font-black text-slate-900 leading-none tracking-tighter transition-transform group-hover:scale-105 duration-300">
+                  {filteredHandymen.length}
+                </span>
+                <div className="flex flex-col">
+                  <span className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] leading-none mb-1">
+                    Professionals
+                  </span>
+                  <span className="text-blue-600/40 text-[10px] font-black uppercase tracking-[0.2em] leading-none">
+                    Available Now
+                  </span>
+                </div>
+              </div>
+              
               {(searchQuery || selectedCategory !== 'All' || minRating > 0 || minExperience > 0 || showOnlyOnline || showFavoritesOnly || useRadiusFilter) && (
                 <button 
                   onClick={() => {
@@ -4718,40 +4731,41 @@ export default function App() {
                     setShowFavoritesOnly(false);
                     setUseRadiusFilter(false);
                   }}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-2xl transition-all duration-300 active:scale-90 border border-slate-200/50 hover:border-red-100 shadow-sm group"
                 >
-                  <X size={12} />
-                  Clear All Filters
+                  <X size={12} strokeWidth={3} className="transition-transform group-hover:rotate-90" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">Reset</span>
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            
+            <div className="flex items-center gap-2 overflow-x-auto pb-4 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap md:justify-end scrollbar-hide">
               {!userLocation && (
                 <button 
                   onClick={handleGetLocation}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all border bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100 whitespace-nowrap shadow-sm hover:shadow-md active:scale-95"
                   title="Enable location to find pros near you"
                 >
-                  <MapPin size={12} />
+                  <MapPin size={14} strokeWidth={2.5} />
                   Enable Location
                 </button>
               )}
               {userLocation && (
                 <button 
                   onClick={() => setUseRadiusFilter(!useRadiusFilter)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all border whitespace-nowrap shadow-sm hover:shadow-md active:scale-95 ${
                     useRadiusFilter 
                     ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-600/20' 
                     : 'bg-white text-slate-500 border-slate-200 hover:border-blue-200 hover:text-blue-600'
                   }`}
                 >
-                  <MapPin size={12} />
+                  <MapPin size={14} strokeWidth={2.5} />
                   Within 10 Miles
                 </button>
               )}
               <button 
                 onClick={() => setShowOnlyOnline(!showOnlyOnline)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all border whitespace-nowrap shadow-sm hover:shadow-md active:scale-95 ${
                   showOnlyOnline 
                   ? 'bg-green-600 text-white border-green-600 shadow-lg shadow-green-600/20' 
                   : 'bg-white text-slate-500 border-slate-200 hover:border-green-200 hover:text-green-600'
@@ -4762,13 +4776,13 @@ export default function App() {
               </button>
               <button 
                 onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all border whitespace-nowrap shadow-sm hover:shadow-md active:scale-95 ${
                   showFavoritesOnly 
                   ? 'bg-red-600 text-white border-red-600 shadow-lg shadow-red-600/20' 
                   : 'bg-white text-slate-500 border-slate-200 hover:border-red-200 hover:text-red-600'
                 }`}
               >
-                <Heart size={12} fill={showFavoritesOnly ? "currentColor" : "none"} />
+                <Heart size={14} strokeWidth={2.5} fill={showFavoritesOnly ? "currentColor" : "none"} />
                 Favorites
               </button>
             </div>

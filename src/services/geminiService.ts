@@ -113,16 +113,21 @@ export const geminiService = {
       const welcomeText = `Welcome to Ṣe Ṣe Wá HandyPadi, your trusted partner for all home services in Nigeria. How can we help you today?`;
       let translatedText = await this.translateText(welcomeText, language);
       
+      console.log(`[DEBUG] geminiService.speakWelcome calling: ${API_URL}/ai/speak-welcome`);
       const response = await fetch(`${API_URL}/ai/speak-welcome`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: translatedText })
       });
-      if (!response.ok) throw new Error(await response.text());
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[DEBUG] speak-welcome error: ${response.status} ${errorText}`);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
       const data = await response.json();
       return data.audioData || null;
-    } catch (error) {
-      console.error("Voice Welcome Error:", error);
+    } catch (error: any) {
+      console.error("Voice Welcome Error:", error.message || error);
       return null;
     }
   }
