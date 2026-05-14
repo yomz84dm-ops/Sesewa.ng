@@ -15,7 +15,9 @@ export const auth = getAuth(app);
 export const storage = getStorage(app);
 
 // Initialize Firestore
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
 
 // Error Handling for Firestore Operations
 export enum OperationType {

@@ -44,6 +44,7 @@ export async function createApi() {
   
   // Security middlewares
   app.use(helmet({
+    contentSecurityPolicy: false, // Turn off CSP locally to avoid breaking Vite/inline scripts
     crossOriginEmbedderPolicy: false // Allows loading external images
   }));
   app.use(express.json({ limit: '50mb' }));
@@ -359,18 +360,12 @@ export async function createApi() {
     try {
       const { reference } = req.params;
 
-      // Validate reference to prevent request forgery/path manipulation in outbound URL
-      // Paystack references are typically alphanumeric with safe separators.
-      if (typeof reference !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(reference)) {
-        return res.status(400).json({ error: "Invalid payment reference" });
-      }
-
       if (!PAYSTACK_SECRET) {
         return res.status(500).json({ error: "Paystack secret key not configured" });
       }
 
       const response = await axios.get(
-        `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+        `https://api.paystack.co/transaction/verify/${reference}`,
         {
           headers: {
             Authorization: `Bearer ${PAYSTACK_SECRET}`
@@ -405,7 +400,7 @@ if (process.env.NODE_ENV !== "test") {
         maxAge: '1y', // Cache static assets for 1 year
         etag: true,
       }));
-      app.get('*', apiLimiter, (req, res) => {
+      app.get('*', (req, res) => {
         // Do not cache the index.html so users always get the latest bundle
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
