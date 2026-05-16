@@ -255,6 +255,16 @@ export default function App() {
   const [handyPadiMessages, setHandyPadiMessages] = useState<{ role: 'user' | 'bot', text: string }[]>([]);
   const [handyPadiInput, setHandyPadiInput] = useState('');
   const [isHandyPadiTyping, setIsHandyPadiTyping] = useState(false);
+  const [showHandyPadiNudge, setShowHandyPadiNudge] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!handyPadiOpen) {
+        setShowHandyPadiNudge(true);
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [handyPadiOpen]);
   const [jobDescriptionInput, setJobDescriptionInput] = useState('');
   const [currentLanguage, setCurrentLanguage] = useState('English');
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
@@ -1712,13 +1722,15 @@ export default function App() {
   const handleSendQuote = async (jobRequestId: string, quoteDetails: { labor: number, materials: number, taxes: number, notes: string }) => {
     try {
       const totalAmount = quoteDetails.labor + quoteDetails.materials + quoteDetails.taxes;
+      const invoiceId = 'INV-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100).toString().padStart(2, '0');
       await updateDoc(doc(db, 'jobRequests', jobRequestId), {
         status: 'responded',
         amount: totalAmount,
         paymentStatus: 'pending',
-        quoteDetails
+        quoteDetails,
+        invoiceId
       });
-      alert('Quote sent successfully!');
+      alert('Invoice generated successfully!');
       setShowQuoteModal(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'jobRequests');
@@ -2634,7 +2646,7 @@ export default function App() {
                             className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
                           >
                             <FileText size={14} />
-                            Send Formal Quote
+                            Generate Invoice
                           </button>
                           <button 
                             onClick={() => handleUpdateJobStatus(req, 'on-the-way')}
@@ -2712,10 +2724,17 @@ export default function App() {
                         <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
                           {req.amount && req.quoteDetails && (
                             <div className="w-full bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-2">
-                              <h4 className="font-bold text-slate-900 text-sm mb-2 flex items-center gap-2">
-                                <FileText size={16} className="text-blue-600" />
-                                Payment Quote
-                              </h4>
+                              <div className="flex justify-between items-center mb-2">
+                                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                                  <FileText size={16} className="text-blue-600" />
+                                  Official Invoice
+                                </h4>
+                                {req.invoiceId && (
+                                  <span className="text-[10px] font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                                    {req.invoiceId}
+                                  </span>
+                                )}
+                              </div>
                               <div className="space-y-1 text-xs text-slate-600 mb-3 border-b border-slate-200 pb-3">
                                 <div className="flex justify-between"><span>Labor</span><span>₦{req.quoteDetails.labor.toLocaleString()}</span></div>
                                 <div className="flex justify-between"><span>Materials</span><span>₦{req.quoteDetails.materials.toLocaleString()}</span></div>
@@ -3450,10 +3469,10 @@ export default function App() {
                               e.stopPropagation();
                               setRequestingQuotePro(handy);
                             }}
-                            className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-95 text-sm"
+                            className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-3 rounded-2xl font-black hover:from-green-400 hover:to-emerald-500 transition-all shadow-xl shadow-green-500/30 active:scale-95 text-sm animate-pulse-slow ring-2 ring-transparent hover:ring-green-300"
                           >
-                            <Zap size={16} />
-                            <span>Request Now</span>
+                            <Zap size={16} className="text-yellow-300" fill="currentColor" />
+                            <span>Book Now</span>
                           </button>
                         </div>
                       )}
@@ -3751,10 +3770,10 @@ export default function App() {
                       </button>
                       <button 
                         onClick={() => setRequestingQuotePro(selectedPro)}
-                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-4 px-6 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 active:scale-95 text-sm"
+                        className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-2xl font-black hover:from-green-400 hover:to-emerald-500 transition-all shadow-2xl shadow-green-500/40 active:scale-95 text-base sm:text-lg animate-pulse-slow ring-4 ring-green-500/20"
                       >
-                        <Zap size={20} />
-                        Request Now
+                        <Zap size={24} className="text-yellow-300" fill="currentColor" />
+                        Book Now
                       </button>
                     </div>
                   )}
@@ -4606,9 +4625,9 @@ export default function App() {
                 
                 <div className="flex flex-col sm:flex-row gap-2 pt-4">
                   <button type="button" onClick={() => setRequestingQuotePro(null)} className="flex-1 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-slate-500 hover:bg-slate-100 transition-all text-sm">Cancel</button>
-                  <button type="submit" className="flex-1 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 text-sm">
-                    <Zap size={16} />
-                    Send Request
+                  <button type="submit" className="flex-1 py-3 sm:py-4 rounded-xl sm:rounded-2xl font-black bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-400 hover:to-emerald-500 transition-all shadow-xl shadow-green-500/30 flex items-center justify-center gap-2 text-base">
+                    <Zap size={20} className="text-yellow-300" fill="currentColor" />
+                    Book Now
                   </button>
                 </div>
               </form>
@@ -5199,10 +5218,10 @@ export default function App() {
             >
               <h2 className="text-xl sm:text-2xl font-bold mb-2 flex items-center gap-2">
                 <FileText className="text-blue-600" />
-                Send Formal Quote
+                Generate Official Invoice
               </h2>
               <p className="text-slate-500 mb-6 text-sm">
-                Provide a cost breakdown to <span className="font-bold text-slate-900">{showQuoteModal.userName}</span>.
+                Provide a cost breakdown to generate an invoice for <span className="font-bold text-slate-900">{showQuoteModal.userName}</span>.
               </p>
               
               <form className="space-y-4" onSubmit={(e) => {
@@ -5245,7 +5264,7 @@ export default function App() {
                   <button type="button" onClick={() => setShowQuoteModal(null)} className="flex-1 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition-all text-sm">Cancel</button>
                   <button type="submit" className="flex-1 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 text-sm">
                     <FileText size={16} />
-                    Send Quote
+                    Generate Invoice
                   </button>
                 </div>
               </form>
@@ -5543,11 +5562,60 @@ export default function App() {
             </motion.div>
           )}
         </AnimatePresence>
+        <AnimatePresence>
+          {showHandyPadiNudge && !handyPadiOpen && (
+            <motion.button
+              initial={{ opacity: 0, x: 20, scale: 0.8 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 20, scale: 0.8 }}
+              onClick={() => {
+                setHandyPadiOpen(true);
+                setShowHandyPadiNudge(false);
+              }}
+              className="absolute bottom-16 right-0 bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-br-none shadow-xl flex items-center gap-2 whitespace-nowrap group hover:bg-blue-700 transition-all border border-blue-400/30"
+            >
+              <div className="flex flex-col items-start leading-none">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">HandyPadi</span>
+                <span className="text-sm font-bold">Ask me anything! 🇳🇬</span>
+              </div>
+              <motion.div 
+                animate={{ x: [0, 5, 0] }}
+                transition={{ repeat: Infinity, duration: 1.5 }}
+                className="bg-white/20 p-1 rounded-lg"
+              >
+                <ChevronRight size={14} className="text-white" />
+              </motion.div>
+            </motion.button>
+          )}
+        </AnimatePresence>
         <button
-          onClick={() => setHandyPadiOpen(!handyPadiOpen)}
-          className="w-14 h-14 bg-white/80 backdrop-blur-md border border-slate-200 rounded-full shadow-xl flex items-center justify-center hover:scale-110 transition-transform active:scale-95 z-[101] overflow-hidden"
+          onClick={() => {
+            setHandyPadiOpen(!handyPadiOpen);
+            setShowHandyPadiNudge(false);
+          }}
+          className={`w-14 h-14 bg-white/80 backdrop-blur-md border rounded-full shadow-xl flex items-center justify-center hover:scale-110 transition-all active:scale-95 z-[101] overflow-hidden ${
+            handyPadiOpen ? 'border-slate-200' : 'border-blue-500 ring-4 ring-blue-500/10'
+          }`}
         >
-          {handyPadiOpen ? <X size={24} className="text-slate-600" /> : <Logo size={40} />}
+          {handyPadiOpen ? (
+            <X size={24} className="text-slate-600" />
+          ) : (
+            <div className="relative w-full h-full flex items-center justify-center">
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  opacity: [0.5, 0.2, 0.5]
+                }}
+                transition={{ 
+                  repeat: Infinity, 
+                  duration: 2,
+                  ease: "easeInOut"
+                }}
+                className="absolute inset-0 bg-blue-500 rounded-full"
+              />
+              <Logo size={40} className="relative z-10" />
+            </div>
+          )}
         </button>
         <Toaster position="top-right" richColors />
       </div>

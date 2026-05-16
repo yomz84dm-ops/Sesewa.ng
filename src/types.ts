@@ -61,6 +61,7 @@ export interface JobRequest {
     taxes: number;
     notes: string;
   };
+  invoiceId?: string;
   scheduledDate?: string;
   scheduledTime?: string;
   paystackReference?: string;
