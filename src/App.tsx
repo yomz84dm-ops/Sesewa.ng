@@ -106,6 +106,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Toaster, toast } from 'sonner';
 import { Logo } from './components/Logo';
+import { LogoPreview } from './components/LogoPreview';
 import { t } from './translations';
 import { getPriceEstimation, PriceEstimation } from './services/aiService';
 import { auth, db, storage, OperationType, handleFirestoreError } from './firebase';
@@ -229,6 +230,7 @@ export default function App() {
   const isAdmin = currentUser?.email === 'yomz84.dm@gmail.com' || currentUser?.role === 'admin';
   const [showTerms, setShowTerms] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showLogoPreview, setShowLogoPreview] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const isShowMode = window.location.search.includes('mode=presentation') || 
                     window.location.search.includes('show=true');
@@ -258,12 +260,38 @@ export default function App() {
   const [showHandyPadiNudge, setShowHandyPadiNudge] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    let nudgeInterval: NodeJS.Timeout;
+    let hideTimer: NodeJS.Timeout;
+
+    const startNudgeCycle = () => {
+      nudgeInterval = setInterval(() => {
+        if (!handyPadiOpen) {
+          setShowHandyPadiNudge(true);
+          
+          hideTimer = setTimeout(() => {
+            setShowHandyPadiNudge(false);
+          }, 8000); // Hide after 8 seconds
+        }
+      }, 45000); // Pop up every 45 seconds
+    };
+
+    const initialTimer = setTimeout(() => {
       if (!handyPadiOpen) {
         setShowHandyPadiNudge(true);
+        hideTimer = setTimeout(() => {
+          setShowHandyPadiNudge(false);
+          startNudgeCycle();
+        }, 8000);
+      } else {
+        startNudgeCycle();
       }
     }, 5000);
-    return () => clearTimeout(timer);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearTimeout(hideTimer);
+      clearInterval(nudgeInterval);
+    };
   }, [handyPadiOpen]);
   const [jobDescriptionInput, setJobDescriptionInput] = useState('');
   const [currentLanguage, setCurrentLanguage] = useState('English');
@@ -2000,6 +2028,11 @@ export default function App() {
 
     return (
       <div className="min-h-screen bg-slate-50 text-slate-900 font-sans overflow-x-hidden relative">
+        {showLogoPreview && <LogoPreview onClose={() => setShowLogoPreview(false)} onSelect={(option) => {
+          console.log("Selected Logo Option:", option);
+          setShowLogoPreview(false);
+          toast.success(`Logo Concept ${option} selected! Just let me know to confirm and I'll deploy it to the app.`);
+        }} />}
         {/* Ambient Animated Background */}
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden" aria-hidden="true">
           <motion.div 
@@ -5195,7 +5228,7 @@ export default function App() {
         </div>
 
         <p className="text-slate-400 text-sm text-center">
-          &copy; 2026 HandyPadi Limited. {currentMarket.name}'s leading platform for repairs.
+          &copy; 2026 Sesewa Golding Limited. {currentMarket.name}'s leading platform for repairs.
         </p>
       </footer>
 
@@ -5307,7 +5340,7 @@ export default function App() {
                     1. The Escrow Payment System
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    Ṣẹ Ṣẹ Wá Golding Limited utilizes a secure Escrow system powered by Paystack. When you book a professional, your payment is held securely by our platform. 
+                    Sesewa Golding Limited utilizes a secure Escrow system powered by Paystack. When you book a professional, your payment is held securely by our platform. 
                     <strong> Funds are only released to the professional once you confirm the job is completed</strong> to your satisfaction. 
                     This ensures that your money is safe and professionals are motivated to deliver high-quality work.
                   </p>
@@ -5334,7 +5367,7 @@ export default function App() {
                     3. Professional Conduct
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    All professionals on Ṣẹ Ṣẹ Wá Golding Limited agree to provide services with integrity. Misrepresentation of skills, harassment, or bypassing the platform's payment system to avoid fees will result in immediate and permanent account suspension.
+                    All professionals on Sesewa Golding Limited agree to provide services with integrity. Misrepresentation of skills, harassment, or bypassing the platform's payment system to avoid fees will result in immediate and permanent account suspension.
                   </p>
                 </section>
 
