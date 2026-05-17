@@ -9,7 +9,7 @@ export const Logo = ({ size, className = "" }: { size?: number, className?: stri
     >
       <img 
         src={logo} 
-        alt="Ṣe Ṣe Wá Logo" 
+        alt="HandyPadi Logo" 
         className="max-w-full max-h-full object-contain"
         referrerPolicy="no-referrer"
       />

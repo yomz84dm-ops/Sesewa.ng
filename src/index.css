@@ -1,7 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Baloo+2:wght@400;600;800&family=Chewy&family=Comic+Neue:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --font-cartoon: 'Chewy', 'Comic Neue', cursive;
 }
 
 @layer utilities {

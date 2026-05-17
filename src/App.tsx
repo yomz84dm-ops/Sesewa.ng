@@ -890,7 +890,7 @@ export default function App() {
         return "The Firebase API key appears to be expired or invalid. If you just set up Firebase, please wait a moment for it to activate, or contact support if the issue persists.";
       case "auth/unauthorized-domain":
         const currentHost = window.location.hostname;
-        const isCustomDomain = currentHost.includes('sesewa.ng');
+        const isCustomDomain = currentHost.includes('handypadi.ng');
         return `Domain Authorization Required: The domain "${currentHost}" is not authorized for Firebase Authentication.
 
 **Fix Steps:**
@@ -1774,7 +1774,7 @@ export default function App() {
       let friendlyMessage = `⚠️ Error: ${errorMsg}.`;
       
       if (errorMsg.includes('404') || errorMsg.includes('<!doctype html>')) {
-        friendlyMessage = "⚠️ HandyPadi's backend is not responding correctly. \n\n**Action Required:** \n1. Ensure your Firebase Functions are deployed (`firebase deploy --only functions`).\n2. If using a custom domain like **sesewa.ng**, check your Hosting rewrites in firebase.json.";
+        friendlyMessage = "⚠️ HandyPadi's backend is not responding correctly. \n\n**Action Required:** \n1. Ensure your Firebase Functions are deployed (`firebase deploy --only functions`).\n2. If using a custom domain like **handypadi.ng**, check your Hosting rewrites in firebase.json.";
       } else if (errorMsg.includes('500')) {
         friendlyMessage = "⚠️ HandyPadi is having trouble processing that request (Server Error). \n\n**Action Required:** \n1. Your GEMINI_API_KEY might be missing in production. Set it using: `firebase functions:secrets:set GEMINI_API_KEY`";
       } else if (errorMsg.includes('fetch failed')) {
@@ -1838,7 +1838,7 @@ export default function App() {
   const getCountryFromDomain = () => {
     const host = window.location.hostname;
     // Explicitly check for Nigeria domains
-    if (host.endsWith('.ng') || host.includes('sesewa.ng')) return { name: 'Nigeria', slogan: 'anywhere in Nigeria', currency: 'NGN', jurisdiction: 'The Federal Republic of Nigeria', law: 'Nigerian Law', compliance: 'Nigeria Data Protection Regulation (NDPR)' };
+    if (host.endsWith('.ng') || host.includes('handypadi.ng')) return { name: 'Nigeria', slogan: 'anywhere in Nigeria', currency: 'NGN', jurisdiction: 'The Federal Republic of Nigeria', law: 'Nigerian Law', compliance: 'Nigeria Data Protection Regulation (NDPR)' };
     if (host.endsWith('.gh')) return { name: 'Ghana', slogan: 'anywhere in Ghana', currency: 'GHS', jurisdiction: 'The Republic of Ghana', law: 'Ghanaian Law', compliance: 'Data Protection Act, 2012 (Act 843)' };
     if (host.endsWith('.ke')) return { name: 'Kenya', slogan: 'anywhere in Kenya', currency: 'KES', jurisdiction: 'The Republic of Kenya', law: 'Kenyan Law', compliance: 'Data Protection Act (DPA), 2019' };
     if (host.endsWith('.za')) return { name: 'South Africa', slogan: 'anywhere in South Africa', currency: 'ZAR', jurisdiction: 'The Republic of South Africa', law: 'South African Law', compliance: 'Protection of Personal Information Act (POPIA)' };
@@ -1983,7 +1983,7 @@ export default function App() {
             <div className="w-20 h-20 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-8" />
             <h1 className="text-2xl font-black text-white mb-4 tracking-tighter">Redirecting...</h1>
             <p className="text-slate-400 font-medium leading-relaxed mb-6">
-              We are taking you to the correct version of Ṣẹ Ṣẹ Wá for your region.
+              We are taking you to the correct version of HandyPadi for your region.
             </p>
             {target && (
               <a 
@@ -2146,7 +2146,7 @@ export default function App() {
                 <Logo className="w-[200px] h-[200px] md:w-[300px] md:h-[300px]" />
               </div>
               
-              <h2 className="text-3xl md:text-4xl font-black tracking-tighter text-slate-900 mb-8">Ṣẹ Ṣẹ Wá</h2>
+              <h2 className="text-4xl md:text-5xl font-cartoon text-slate-900 mb-8">HandyPadi</h2>
               
               <div className="grid grid-cols-2 gap-4 w-full">
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
@@ -2188,8 +2188,8 @@ export default function App() {
             <div className="flex items-center gap-2">
               <Logo className="w-8 h-8 sm:w-10 sm:h-10 transition-transform group-hover:scale-110" />
               <div className="flex flex-col leading-none">
-                <span className="font-black text-sm sm:text-xl tracking-tighter text-blue-600 uppercase">Ṣe Ṣẹ Wá</span>
-                <span className="hidden sm:inline text-[8px] font-black text-blue-600 tracking-[0.2em] uppercase">HandyPadi</span>
+                <span className="font-cartoon text-xl sm:text-2xl text-blue-600">HandyPadi</span>
+                <span className="hidden sm:inline text-[8px] font-black text-slate-400 tracking-[0.2em] uppercase">Marketplace</span>
               </div>
             </div>
           </div>
@@ -4005,7 +4005,7 @@ export default function App() {
                                 // This won't actually log into Firebase without credentials, 
                                 // but we can simulate the state for UI if needed.
                                 // For now, we just suggest the real login.
-                                setAuthError("Please use the Google Login below. If it fails, ensure sesewa.ng is authorized in Firebase Console.");
+                                setAuthError("Please use the Google Login below. If it fails, ensure handypadi.ng is authorized in Firebase Console.");
                                 setAuthLoading(false);
                               } catch (e) {}
                             }}
@@ -5148,7 +5148,7 @@ export default function App() {
         <div className="flex flex-wrap justify-center items-center gap-6 text-xs font-bold text-slate-400 uppercase tracking-widest">
           <button onClick={() => setShowTerms(true)} className="hover:text-blue-600 transition-colors">Terms of Service</button>
           <button onClick={() => setShowPrivacy(true)} className="hover:text-blue-600 transition-colors">Privacy Policy</button>
-          <a href="mailto:support@sesewa.ng" className="hover:text-blue-600 transition-colors">Support</a>
+          <a href="mailto:support@handypadi.ng" className="hover:text-blue-600 transition-colors">Support</a>
           <button 
             onClick={async () => {
               toast.loading("Running System Diagnostic...");
@@ -5195,7 +5195,7 @@ export default function App() {
         </div>
 
         <p className="text-slate-400 text-sm text-center">
-          &copy; 2026 Ṣe Ṣẹ Wá Golding Limited. {currentMarket.name}'s leading platform for repairs.
+          &copy; 2026 HandyPadi Limited. {currentMarket.name}'s leading platform for repairs.
         </p>
       </footer>
 
@@ -5434,7 +5434,7 @@ export default function App() {
                     4. Contact Our Data Protection Officer
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    If you have questions about your data or wish to exercise your rights under the {currentMarket.compliance}, please contact us at <strong>privacy@sesewa.ng</strong>.
+                    If you have questions about your data or wish to exercise your rights under the {currentMarket.compliance}, please contact us at <strong>privacy@handypadi.ng</strong>.
                   </p>
                 </section>
               </div>
@@ -5494,7 +5494,7 @@ export default function App() {
               <div className="p-4 bg-white border-b border-slate-100 text-slate-900 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Logo size={32} />
-                  <span className="font-bold">HandyPadi AI</span>
+                  <span className="font-cartoon text-xl text-blue-600">HandyPadi <span className="font-sans font-bold text-sm text-slate-900">AI</span></span>
                 </div>
                 <button onClick={() => setHandyPadiOpen(false)} className="hover:bg-slate-100 p-1 rounded-lg text-slate-400">
                   <X size={18} />
@@ -5507,7 +5507,7 @@ export default function App() {
                     <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
                       <Logo size={48} />
                     </div>
-                    <p className="text-slate-500 text-sm">Hi! I'm HandyPadi. How can I help you today?</p>
+                    <p className="text-slate-500 text-sm">Hi! I'm <span className="font-cartoon text-lg text-blue-600">HandyPadi</span>. How can I help you today?</p>
                   </div>
                 )}
                 {handyPadiMessages.map((msg, i) => (
@@ -5575,7 +5575,7 @@ export default function App() {
               className="absolute bottom-16 right-0 bg-blue-600 text-white px-4 py-2 rounded-2xl rounded-br-none shadow-xl flex items-center gap-2 whitespace-nowrap group hover:bg-blue-700 transition-all border border-blue-400/30"
             >
               <div className="flex flex-col items-start leading-none">
-                <span className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1">HandyPadi</span>
+                <span className="text-xl font-cartoon opacity-90 mb-1">HandyPadi</span>
                 <span className="text-sm font-bold">Ask me anything! 🇳🇬</span>
               </div>
               <motion.div 
