@@ -4,7 +4,7 @@ const translationCache: Record<string, string> = {};
 export const geminiService = {
   async matchHandymen(query: string, handymen: any[]) {
     try {
-      const response = await fetch(`${API_URL}/ai/match-handymen`, {
+      const response = await fetch(`${API_URL}/gemini/match-handymen`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, handymen })
@@ -19,7 +19,7 @@ export const geminiService = {
 
   async refineJobDescription(initialDescription: string) {
     try {
-      const response = await fetch(`${API_URL}/ai/refine-description`, {
+      const response = await fetch(`${API_URL}/gemini/refine-description`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ initialDescription })
@@ -35,7 +35,7 @@ export const geminiService = {
   async summarizeReviews(reviews: any[]) {
     if (reviews.length === 0) return "No reviews yet to summarize.";
     try {
-      const response = await fetch(`${API_URL}/ai/summarize-reviews`, {
+      const response = await fetch(`${API_URL}/gemini/summarize-reviews`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviews })
@@ -51,7 +51,7 @@ export const geminiService = {
 
   async analyzeIssueImage(base64Image: string, mimeType: string) {
     try {
-      const response = await fetch(`${API_URL}/ai/analyze-image`, {
+      const response = await fetch(`${API_URL}/gemini/analyze-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ base64Image, mimeType })
@@ -66,7 +66,7 @@ export const geminiService = {
 
   async handyPadiChat(message: string, history: any[] = [], currentLanguage: string = 'English') {
     try {
-      const response = await fetch(`${API_URL}/ai/chat`, {
+      const response = await fetch(`${API_URL}/gemini/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, history, currentLanguage })
@@ -92,7 +92,7 @@ export const geminiService = {
     if (translationCache[cacheKey]) return translationCache[cacheKey];
 
     try {
-      const response = await fetch(`${API_URL}/ai/translate`, {
+      const response = await fetch(`${API_URL}/gemini/translate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, targetLanguage })
@@ -110,11 +110,11 @@ export const geminiService = {
 
   async speakWelcome(language: string) {
     try {
-      const welcomeText = `Welcome to Ṣe Ṣe Wá HandyPadi, your trusted partner for all home services in Nigeria. How can we help you today?`;
+      const welcomeText = `Welcome to HandyPadi, your trusted partner for all home services in Nigeria. How can we help you today?`;
       let translatedText = await this.translateText(welcomeText, language);
       
-      console.log(`[DEBUG] geminiService.speakWelcome calling: ${API_URL}/ai/speak-welcome`);
-      const response = await fetch(`${API_URL}/ai/speak-welcome`, {
+      console.log(`[DEBUG] geminiService.speakWelcome calling: ${API_URL}/gemini/speak-welcome`);
+      const response = await fetch(`${API_URL}/gemini/speak-welcome`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: translatedText })

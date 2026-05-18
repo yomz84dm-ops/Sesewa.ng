@@ -460,7 +460,7 @@ export const VoiceWelcome = ({ lang }: { lang: string }) => {
 
   const fetchAudio = async (retryCount = 0) => {
     try {
-      const url = `${import.meta.env.VITE_API_URL || '/api'}/ai/speak-welcome`;
+      const url = `${import.meta.env.VITE_API_URL || '/api'}/gemini/speak-welcome`;
       console.log(`[DEBUG] fetchAudio starting (attempt ${retryCount + 1}). URL: ${url}, lang: ${lang}`);
       const base64Audio = await geminiService.speakWelcome(lang);
       if (!base64Audio) {

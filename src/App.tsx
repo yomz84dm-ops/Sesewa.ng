@@ -5609,7 +5609,7 @@ export default function App() {
             >
               <div className="flex flex-col items-start leading-none">
                 <span className="text-xl font-cartoon opacity-90 mb-1">HandyPadi</span>
-                <span className="text-sm font-bold">Ask me anything! 🇳🇬</span>
+                <span className="text-sm font-bold">Ask me anything!</span>
               </div>
               <motion.div 
                 animate={{ x: [0, 5, 0] }}

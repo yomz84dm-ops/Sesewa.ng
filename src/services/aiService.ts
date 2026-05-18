@@ -18,7 +18,7 @@ export async function getPriceEstimation(
   language: string = "English"
 ): Promise<PriceEstimation> {
   try {
-    const response = await fetch(`${API_URL}/ai/price-estimation`, {
+    const response = await fetch(`${API_URL}/gemini/price-estimation`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ task, location, country, currency, language })

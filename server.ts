@@ -71,7 +71,7 @@ export async function createApi() {
 
   // AI Routes
   
-  app.get("/api/ai/debug", (req, res) => {
+  app.get("/api/gemini/debug", (req, res) => {
     let key1 = process.env.GEMINI_API_KEY;
     res.json({
       key_length: key1?.length,
@@ -80,7 +80,7 @@ export async function createApi() {
     });
   });
 
-  app.post("/api/ai/match-handymen", async (req, res) => {
+  app.post("/api/gemini/match-handymen", async (req, res) => {
     try {
       const { query, handymen } = req.body;
       const prompt = `
@@ -108,7 +108,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/ai/refine-description", async (req, res) => {
+  app.post("/api/gemini/refine-description", async (req, res) => {
     try {
       const { initialDescription } = req.body;
       const prompt = `
@@ -140,7 +140,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/ai/summarize-reviews", async (req, res) => {
+  app.post("/api/gemini/summarize-reviews", async (req, res) => {
     try {
       const { reviews } = req.body;
       if (!reviews || reviews.length === 0) return res.json({ result: "No reviews yet to summarize." });
@@ -159,7 +159,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/ai/analyze-image", async (req, res) => {
+  app.post("/api/gemini/analyze-image", async (req, res) => {
     try {
       const { base64Image, mimeType } = req.body;
       const prompt = "Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation.";
@@ -195,7 +195,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/ai/chat", async (req, res) => {
+  app.post("/api/gemini/chat", async (req, res) => {
     try {
       const { message, history = [], currentLanguage = 'English' } = req.body;
       const response = await getAIClient().models.generateContent({
@@ -222,7 +222,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/ai/translate", async (req, res) => {
+  app.post("/api/gemini/translate", async (req, res) => {
     try {
       const { text, targetLanguage } = req.body;
       let prompt = "";
@@ -255,8 +255,8 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/ai/speak-welcome", async (req, res) => {
-    console.log("[DEBUG] Received request for /api/ai/speak-welcome");
+  app.post("/api/gemini/speak-welcome", async (req, res) => {
+    console.log("[DEBUG] Received request for /api/gemini/speak-welcome");
     try {
       const { text } = req.body;
       console.log("[DEBUG] Generating TTS for text:", text);
@@ -282,7 +282,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/ai/price-estimation", async (req, res) => {
+  app.post("/api/gemini/price-estimation", async (req, res) => {
     try {
       const { task, location, country, currency, language = "English" } = req.body;
       const prompt = `
