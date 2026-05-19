@@ -3871,7 +3871,8 @@ export default function App() {
                       <AlertCircle size={18} className="shrink-0 mt-0.5" />
                       <p className="font-medium">{authError}</p>
                     </div>
-                    {window.location.hostname !== 'localhost' && !window.location.hostname.includes('firebaseapp.com') && (
+                    {window.location.hostname !== 'localhost' &&
+                      !(window.location.hostname === 'firebaseapp.com' || window.location.hostname.endsWith('.firebaseapp.com')) && (
                       <div className="mt-2 p-3 bg-white/50 rounded-xl border border-red-200 text-xs">
                         <p className="font-bold mb-1 uppercase tracking-wider">Potential Solution:</p>
                         <p>Firebase requires <strong>{window.location.hostname}</strong> to be in the "Authorized Domains" list in the Firebase Console under Authentication Settings.</p>
