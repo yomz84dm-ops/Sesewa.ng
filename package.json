@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
-    "axios": "^1.15.2",
+    "axios": "^1.13.6",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
@@ -49,9 +49,10 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.4.2"
+    "vite": "^6.2.0"
   },
   "overrides": {
-    "protobufjs": "^7.5.6"
+    "protobufjs": "^7.5.6",
+    "@tootallnate/once": "^3.0.1"
   }
 }

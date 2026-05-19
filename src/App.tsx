@@ -1401,17 +1401,10 @@ export default function App() {
   };
 
   const handleAddReview = (proId: string, rating: number, comment: string) => {
-    const bound = 1000;
-    const maxUnbiased = Math.floor(0x100000000 / bound) * bound;
-    let randomValue: number;
-    do {
-      randomValue = crypto.getRandomValues(new Uint32Array(1))[0];
-    } while (randomValue >= maxUnbiased);
-    const randomUserNumber = randomValue % bound;
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + randomUserNumber,
+      userName: 'User ' + Math.floor(Math.random() * 1000),
       rating,
       comment,
       date: new Date().toLocaleDateString()
@@ -3878,8 +3871,7 @@ export default function App() {
                       <AlertCircle size={18} className="shrink-0 mt-0.5" />
                       <p className="font-medium">{authError}</p>
                     </div>
-                    {window.location.hostname !== 'localhost' &&
-                      !(window.location.hostname === 'firebaseapp.com' || window.location.hostname.endsWith('.firebaseapp.com')) && (
+                    {window.location.hostname !== 'localhost' && !window.location.hostname.includes('firebaseapp.com') && (
                       <div className="mt-2 p-3 bg-white/50 rounded-xl border border-red-200 text-xs">
                         <p className="font-bold mb-1 uppercase tracking-wider">Potential Solution:</p>
                         <p>Firebase requires <strong>{window.location.hostname}</strong> to be in the "Authorized Domains" list in the Firebase Console under Authentication Settings.</p>
