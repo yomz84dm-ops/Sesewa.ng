@@ -44,14 +44,28 @@ export async function createApi() {
   
   // Security middlewares
   app.use(helmet({
-    contentSecurityPolicy: false, // Turn off CSP locally to avoid breaking Vite/inline scripts
-    crossOriginEmbedderPolicy: false // Allows loading external images
+    contentSecurityPolicy: {
+      directives: {
+        "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        "default-src": ["'self'", "https:", "http:", "data:", "blob:"],
+        "img-src": ["'self'", "https:", "http:", "data:", "blob:"],
+        "style-src": ["'self'", "'unsafe-inline'", "https:", "http:"],
+        "connect-src": ["'self'", "https:", "http:", "ws:", "wss:"],
+        "frame-ancestors": ["*"],
+      },
+    },
+    xFrameOptions: false,
+    crossOriginEmbedderPolicy: false
   }));
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
   app.use(cors());
 
-  // Apply rate limiter specifically to the paystack API endpoints
+  // Apply general rate limiter
+  const generalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
+  app.use(generalLimiter);
+
+  // Apply strict rate limiter specifically to the paystack API endpoints
   app.use("/api/paystack/", apiLimiter);
 
   // Request logger for debugging
@@ -365,7 +379,7 @@ export async function createApi() {
       }
 
       const response = await axios.get(
-        `https://api.paystack.co/transaction/verify/${reference}`,
+        `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
         {
           headers: {
             Authorization: `Bearer ${PAYSTACK_SECRET}`

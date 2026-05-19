@@ -7,7 +7,7 @@ const { GoogleGenAI, Type } = require("@google/genai");
 require("dotenv").config();
 
 const app = express();
-app.use(cors({ origin: true }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:3000" }));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
@@ -337,7 +337,7 @@ app.get("/api/paystack/verify/:reference", async (req, res) => {
     }
 
     const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${reference}`,
+      `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
       {
         headers: {
           Authorization: `Bearer ${key}`
