@@ -1401,10 +1401,17 @@ export default function App() {
   };
 
   const handleAddReview = (proId: string, rating: number, comment: string) => {
+    const bound = 1000;
+    const maxUnbiased = Math.floor(0x100000000 / bound) * bound;
+    let randomValue: number;
+    do {
+      randomValue = crypto.getRandomValues(new Uint32Array(1))[0];
+    } while (randomValue >= maxUnbiased);
+    const randomUserNumber = randomValue % bound;
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + Math.floor(Math.random() * 1000),
+      userName: 'User ' + randomUserNumber,
       rating,
       comment,
       date: new Date().toLocaleDateString()
