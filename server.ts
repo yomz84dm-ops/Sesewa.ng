@@ -57,7 +57,22 @@ export async function createApi() {
   }));
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-  app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
+  const allowedOrigins = (process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Allow non-browser or same-origin requests with no Origin header.
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("CORS origin not allowed"));
+    }
+  }));
 
   // Apply general rate limiter
   const generalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
