@@ -1404,7 +1404,7 @@ export default function App() {
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + crypto.randomInt(1000),
+      userName: 'User ' + Math.floor(crypto.getRandomValues(new Uint32Array(1))[0] % 1000),
       rating,
       comment,
       date: new Date().toLocaleDateString()

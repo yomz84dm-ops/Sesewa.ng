@@ -13,22 +13,11 @@
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
+    "strict": true,
     "allowJs": true,
     "jsx": "react-jsx",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "noEmit": true,
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "strictPropertyInitialization": true,
-    "noImplicitThis": true,
-    "alwaysStrict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true
+    "noEmit": true
   }
 }

@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || '/api'; 
+// Force relative path for API so it works across the reverse proxy correctly
+const API_URL = '/api'; 
 const translationCache: Record<string, string> = {};
 
 export const geminiService = {
@@ -127,7 +128,9 @@ export const geminiService = {
       const data = await response.json();
       return data.audioData || null;
     } catch (error: any) {
-      console.error("Voice Welcome Error:", error.message || error);
+      console.error("Voice Welcome Error:", error);
+      console.error("Voice Welcome Error Message:", error.message);
+      console.error("Voice Welcome Error Stack:", error.stack);
       return null;
     }
   }
