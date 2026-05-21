@@ -1934,7 +1934,7 @@ export default function App() {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const result = await geminiService.analyzeIssueImage(base64, file.type);
+        const result = await geminiService.analyzeIssueImage(base64, file.type, currentLanguage);
         setAiDiagnosis(result);
         if (result?.suggestedCategory) {
           setSelectedCategory(result.suggestedCategory);
@@ -3058,8 +3058,8 @@ export default function App() {
             >
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:scale-150 transition-transform duration-700" />
               <div className="relative z-10 text-center md:text-left">
-                <h4 className="text-xl font-black tracking-tight mb-1">Not sure what's broken?</h4>
-                <p className="text-purple-100 text-sm">Upload a photo and our AI will tell you who to call.</p>
+                <h4 className="text-xl font-black tracking-tight mb-1">{t('Not sure what you need help with?', currentLanguage)}</h4>
+                <p className="text-purple-100 text-sm">{t('Upload a photo and our AI will tell you who to call.', currentLanguage)}</p>
               </div>
               <div className="relative z-10 shrink-0">
                 <div className="relative inline-block">
@@ -3094,7 +3094,7 @@ export default function App() {
             {isAiMatching && (
               <div className="flex items-center justify-center gap-2 text-blue-600 text-sm font-bold mb-4 animate-pulse">
                 <Sparkles size={16} />
-                <span>AI is finding the best matches for you...</span>
+                <span>{t('AI is finding the best matches for you...', currentLanguage)}</span>
               </div>
             )}
 
@@ -3108,9 +3108,9 @@ export default function App() {
                   <Sparkles size={20} />
                 </div>
                 <div>
-                  <h4 className="font-bold text-purple-900 text-sm">AI Diagnosis Result</h4>
+                  <h4 className="font-bold text-purple-900 text-sm">{t('AI Diagnosis Result', currentLanguage)}</h4>
                   <div className="flex flex-col gap-1">
-                    <p className="text-purple-800 text-xs mt-1"><strong>Issue:</strong> {aiDiagnosis.issue}</p>
+                    <p className="text-purple-800 text-xs mt-1"><strong>{t('Issue:', currentLanguage)}</strong> {aiDiagnosis.issue}</p>
                     <p className="text-purple-700 text-[10px] mt-1">{aiDiagnosis.explanation}</p>
                     <button 
                       onClick={() => handleTranslate(`${aiDiagnosis.issue}. ${aiDiagnosis.explanation}`, 'ai-diag')}
@@ -3124,7 +3124,7 @@ export default function App() {
                     onClick={() => setAiDiagnosis(null)}
                     className="mt-2 text-[10px] font-bold text-purple-600 hover:underline"
                   >
-                    Clear Diagnosis
+                    {t('Clear Diagnosis', currentLanguage)}
                   </button>
                 </div>
               </motion.div>
@@ -3203,6 +3203,7 @@ export default function App() {
         {/* AI Estimation Section */}
         <AIEstimationSection 
           market={currentMarket}
+          lang={currentLanguage}
           onSearch={(query) => {
             setSearchQuery(query);
             handleSmartMatch(query);

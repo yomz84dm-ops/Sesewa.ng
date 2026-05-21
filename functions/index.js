@@ -7,7 +7,7 @@ const { GoogleGenAI, Type } = require("@google/genai");
 require("dotenv").config();
 
 const app = express();
-app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:3000" }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
@@ -122,8 +122,8 @@ app.post("/api/ai/summarize-reviews", async (req, res) => {
 
 app.post("/api/ai/analyze-image", async (req, res) => {
   try {
-    const { base64Image, mimeType } = req.body;
-    const prompt = "Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation.";
+    const { base64Image, mimeType, language = "English" } = req.body;
+    const prompt = `Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation. Please formulate your reasoning, issue, and explanation strictly in the ${language} language.`;
     const response = await getAIClient().models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
@@ -247,7 +247,7 @@ app.post("/api/ai/price-estimation", async (req, res) => {
       Analyze the following task: "${task}" in the location: "${location}, ${country}".
       Provide a fair market price range in ${currency}.
       - Account for the specific cost of living, logistics, and supply chain in "${location}, ${country}".
-      - Provide reasoning in "${language}".
+      - Please formulate your reasoning, factors, partsNeeded, and marketNotes strictly in the "${language}" language.
     `;
 
     const response = await getAIClient().models.generateContent({

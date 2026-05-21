@@ -5,11 +5,7 @@ import dotenv from "dotenv";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import path from "path";
-import { fileURLToPath } from "url";
 import { GoogleGenAI, Type } from "@google/genai";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -55,11 +51,13 @@ export async function createApi() {
       },
     },
     xFrameOptions: false,
-    crossOriginEmbedderPolicy: false
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false,
+    crossOriginOpenerPolicy: false
   }));
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-  app.use(cors());
+  app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 
   // Apply general rate limiter
   const generalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
@@ -85,7 +83,7 @@ export async function createApi() {
 
   // AI Routes
   
-  app.get("/api/gemini/debug", (req, res) => {
+  app.get("/api/ai/debug", (req, res) => {
     let key1 = process.env.GEMINI_API_KEY;
     res.json({
       key_length: key1?.length,
@@ -94,7 +92,7 @@ export async function createApi() {
     });
   });
 
-  app.post("/api/gemini/match-handymen", async (req, res) => {
+  app.post("/api/ai/match-handymen", async (req, res) => {
     try {
       const { query, handymen } = req.body;
       const prompt = `
@@ -122,7 +120,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/gemini/refine-description", async (req, res) => {
+  app.post("/api/ai/refine-description", async (req, res) => {
     try {
       const { initialDescription } = req.body;
       const prompt = `
@@ -154,7 +152,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/gemini/summarize-reviews", async (req, res) => {
+  app.post("/api/ai/summarize-reviews", async (req, res) => {
     try {
       const { reviews } = req.body;
       if (!reviews || reviews.length === 0) return res.json({ result: "No reviews yet to summarize." });
@@ -173,10 +171,10 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/gemini/analyze-image", async (req, res) => {
+  app.post("/api/ai/analyze-image", async (req, res) => {
     try {
-      const { base64Image, mimeType } = req.body;
-      const prompt = "Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation.";
+      const { base64Image, mimeType, language = "English" } = req.body;
+      const prompt = `Analyze this image of a household problem. What is the likely issue and what category of professional (e.g., Plumber, Electrician, Carpenter) is best suited to fix it? Provide a brief explanation. Please formulate your reasoning, issue, and explanation strictly in the ${language} language.`;
       const response = await getAIClient().models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
@@ -209,7 +207,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/gemini/chat", async (req, res) => {
+  app.post("/api/ai/chat", async (req, res) => {
     try {
       const { message, history = [], currentLanguage = 'English' } = req.body;
       const response = await getAIClient().models.generateContent({
@@ -236,7 +234,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/gemini/translate", async (req, res) => {
+  app.post("/api/ai/translate", async (req, res) => {
     try {
       const { text, targetLanguage } = req.body;
       let prompt = "";
@@ -269,8 +267,8 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/gemini/speak-welcome", async (req, res) => {
-    console.log("[DEBUG] Received request for /api/gemini/speak-welcome");
+  app.post("/api/ai/speak-welcome", async (req, res) => {
+    console.log("[DEBUG] Received request for /api/ai/speak-welcome");
     try {
       const { text } = req.body;
       console.log("[DEBUG] Generating TTS for text:", text);
@@ -296,7 +294,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/gemini/price-estimation", async (req, res) => {
+  app.post("/api/ai/price-estimation", async (req, res) => {
     try {
       const { task, location, country, currency, language = "English" } = req.body;
       const prompt = `
@@ -304,7 +302,7 @@ export async function createApi() {
         Analyze the following task: "${task}" in the location: "${location}, ${country}".
         Provide a fair market price range in ${currency}.
         - Account for the specific cost of living, logistics, and supply chain in "${location}, ${country}".
-        - Provide reasoning in "${language}".
+        - Please formulate your reasoning, factors, partsNeeded, and marketNotes strictly in the "${language}" language.
       `;
   
       const response = await getAIClient().models.generateContent({

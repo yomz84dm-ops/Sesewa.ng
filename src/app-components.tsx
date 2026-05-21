@@ -460,7 +460,7 @@ export const VoiceWelcome = ({ lang }: { lang: string }) => {
 
   const fetchAudio = async (retryCount = 0) => {
     try {
-      const url = `${import.meta.env.VITE_API_URL || '/api'}/gemini/speak-welcome`;
+      const url = `${import.meta.env.VITE_API_URL || '/api'}/ai/speak-welcome`;
       console.log(`[DEBUG] fetchAudio starting (attempt ${retryCount + 1}). URL: ${url}, lang: ${lang}`);
       const base64Audio = await geminiService.speakWelcome(lang);
       if (!base64Audio) {
@@ -644,7 +644,7 @@ const PaystackBankTransferGuide = ({ lang }: { lang: string }) => {
 };
 
 // --- AI Price Guide Component ---
-export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: string) => void, market: { name: string, currency: string } }) => {
+export const AIEstimationSection = ({ onSearch, market, lang }: { onSearch: (query: string) => void, market: { name: string, currency: string }, lang: string }) => {
   const [task, setTask] = useState('');
   const [location, setLocation] = useState('Lagos');
   const [estimation, setEstimation] = useState<PriceEstimation | null>(null);
@@ -656,7 +656,7 @@ export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: st
     setLoading(true);
     setError(null);
     try {
-      const result = await getPriceEstimation(task, location, market.name, market.currency);
+      const result = await getPriceEstimation(task, location, market.name, market.currency, lang);
       setEstimation(result);
     } catch (err) {
       setError('Could not get estimation. Please try again.');
@@ -692,11 +692,11 @@ export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: st
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 font-medium mb-6"
           >
             <Sparkles size={16} />
-            <span>AI Price Estimator</span>
+            <span>{t('AI Price Estimator', lang)}</span>
           </motion.div>
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">Know the Fair Price Before You Book</h2>
+          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">{t('Know the Fair Price Before You Book', lang)}</h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-            Our AI analyzes current market trends in {market.name} to give you a fair price range for any repair task.
+            {t('Our AI analyzes current market trends in', lang)} {market.name} {t('to give you a fair price range for any repair task.', lang)}
           </p>
         </div>
 
@@ -705,12 +705,12 @@ export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: st
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-slate-300 text-sm font-medium ml-1">What needs fixing?</label>
+                  <label className="text-slate-300 text-sm font-medium ml-1">{t('What needs fixing?', lang)}</label>
                   <div className="relative">
                     <PenTool className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                     <input 
                       type="text" 
-                      placeholder="e.g. Repair 3HP AC leak" 
+                      placeholder={t('e.g. Repair 3HP AC leak', lang)} 
                       value={task}
                       onChange={(e) => setTask(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 text-white pl-12 pr-4 py-4 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none"
@@ -718,7 +718,7 @@ export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: st
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-slate-300 text-sm font-medium ml-1">Where are you?</label>
+                  <label className="text-slate-300 text-sm font-medium ml-1">{t('Where are you?', lang)}</label>
                   <div className="relative">
                     <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                     <select 
@@ -745,12 +745,12 @@ export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: st
                 {loading ? (
                   <>
                     <RotateCcw className="animate-spin" size={20} />
-                    <span>Analyzing Market Data...</span>
+                    <span>{t('Analyzing Market Data...', lang)}</span>
                   </>
                 ) : (
                   <>
                     <Calculator size={20} />
-                    <span>Get Instant Estimate</span>
+                    <span>{t('Get Instant Estimate', lang)}</span>
                   </>
                 )}
               </button>
@@ -758,7 +758,7 @@ export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: st
               {error && (
                 <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl flex items-center gap-3">
                   <AlertCircle size={20} />
-                  <p>{error}</p>
+                  <p>{t(error, lang)}</p>
                 </div>
               )}
 
@@ -773,7 +773,7 @@ export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: st
                     <div className="flex flex-col md:flex-row gap-8">
                       <div className="flex-1 space-y-6">
                         <div>
-                          <p className="text-slate-500 text-sm font-medium mb-1 uppercase tracking-wider">Estimated Fair Range</p>
+                          <p className="text-slate-500 text-sm font-medium mb-1 uppercase tracking-wider">{t('Estimated Fair Range', lang)}</p>
                           <div className="flex items-baseline gap-2">
                             <span className="text-5xl font-black text-white">
                               {currencySymbol}{estimation.minPrice.toLocaleString()} - {currencySymbol}{estimation.maxPrice.toLocaleString()}
@@ -793,13 +793,13 @@ export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: st
                           className="w-full bg-white text-slate-900 font-bold py-4 rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
                         >
                           <Search size={20} />
-                          Find Professionals Now
+                          {t('Find Professionals Now', lang)}
                         </button>
                       </div>
 
                       <div className="md:w-1/3 space-y-6">
                         <div>
-                          <p className="text-slate-500 text-sm font-medium mb-3 uppercase tracking-wider">Price Factors</p>
+                          <p className="text-slate-500 text-sm font-medium mb-3 uppercase tracking-wider">{t('Price Factors', lang)}</p>
                           <ul className="space-y-2">
                             {estimation.factors.map((factor, i) => (
                               <li key={i} className="flex items-center gap-2 text-slate-300 text-sm">
@@ -813,7 +813,7 @@ export const AIEstimationSection = ({ onSearch, market }: { onSearch: (query: st
                         <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/10">
                           <div className="flex items-center gap-2 text-orange-400 mb-2">
                             <AlertTriangle size={16} />
-                            <span className="text-xs font-bold uppercase tracking-wider">Expert's Note</span>
+                            <span className="text-xs font-bold uppercase tracking-wider">{t("Expert's Note", lang)}</span>
                           </div>
                           <p className="text-slate-400 text-xs leading-relaxed">
                             {estimation.marketNotes}
