@@ -8,10 +8,10 @@ export default defineConfig(({mode}) => {
   return {
     plugins: [react({ jsxRuntime: 'automatic', jsxImportSource: 'react' }), tailwindcss()],
     define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(process.env.GEMINI_API_KEY || env.GEMINI_API_KEY || ''),
+      // SECURITY: Do NOT expose API keys to the frontend bundle
+      // GEMINI_API_KEY should only exist on the backend server
       'process.env.API_KEY': JSON.stringify(process.env.API_KEY || env.API_KEY || ''),
-      'process.env.VITE_GEMINI_API_KEY': JSON.stringify(process.env.VITE_GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || ''),
-      'import.meta.env.GEMINI_API_KEY': JSON.stringify(process.env.GEMINI_API_KEY || env.GEMINI_API_KEY || ''),
+      'process.env.VITE_PAYSTACK_PUBLIC_KEY': JSON.stringify(process.env.VITE_PAYSTACK_PUBLIC_KEY || env.VITE_PAYSTACK_PUBLIC_KEY || ''),
       'process.env.NODE_ENV': JSON.stringify(mode),
     },
     server: {
