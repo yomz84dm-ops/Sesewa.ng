@@ -68,6 +68,7 @@
         "status": { "type": "string", "enum": ["pending", "responded", "on-the-way", "completed", "cancelled"] },
         "paymentStatus": { "type": "string", "enum": ["none", "pending", "escrowed", "released", "refunded", "disputed"] },
         "amount": { "type": "number" },
+        "aellaReference": { "type": "string" },
         "paystackReference": { "type": "string" },
         "date": { "type": "string" },
         "unlockedBy": { "type": "array", "items": { "type": "string" } }

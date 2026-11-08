@@ -1404,7 +1404,7 @@ export default function App() {
     const newReview: Review = {
       id: Date.now().toString(),
       proId,
-      userName: 'User ' + crypto.randomInt(1000),
+      userName: 'User ' + Math.floor(crypto.getRandomValues(new Uint32Array(1))[0] % 1000),
       rating,
       comment,
       date: new Date().toLocaleDateString()
@@ -1506,12 +1506,14 @@ export default function App() {
     }
   };
 
-  // Check for Paystack callback
+  // Check for Aella payment callback
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const reference = urlParams.get('reference');
     if (reference && jobRequests.length > 0) {
-      const job = jobRequests.find(j => j.paystackReference === reference);
+      const job = jobRequests.find(
+        j => j.aellaReference === reference
+      );
       if (job && job.paymentStatus === 'pending') {
         handleVerifyPayment(reference, job.id);
         // Clean up URL and redirect to home
@@ -1571,7 +1573,7 @@ export default function App() {
   const handleInitializePayment = async (jobRequest: JobRequest, amount: number) => {
     if (!currentUser) return;
     try {
-      const response = await axios.post('/api/paystack/initialize', {
+      const response = await axios.post('/api/aella/initialize', {
         email: currentUser.email,
         amount,
         metadata: {
@@ -1581,19 +1583,18 @@ export default function App() {
       });
       
       if (response.data.status) {
-        // Use window.location.href to avoid popup blockers
-        window.location.href = response.data.data.authorization_url;
-        
         await updateDoc(doc(db, 'jobRequests', jobRequest.id), {
-          paystackReference: response.data.data.reference,
+          aellaReference: response.data.data.reference,
           paymentStatus: 'pending',
           amount
         });
         setShowPaymentModal(null);
+        // Redirect to Aella authorization URL
+        window.location.href = response.data.data.authorization_url;
       }
     } catch (error: any) {
       console.error("Payment initialization failed:", error);
-      let errorMsg = "Failed to start payment process.";
+      let errorMsg = "Failed to start Aella payment process.";
       if (error.response?.status === 404) {
         errorMsg = "Payment service endpoint not found. Please ensure Firebase Functions are deployed.";
       } else if (error.message.includes('fetch failed') || error.message.includes('Network Error')) {
@@ -1605,12 +1606,12 @@ export default function App() {
 
   const handleVerifyPayment = async (reference: string, jobRequestId: string) => {
     try {
-      const response = await axios.get(`/api/paystack/verify/${reference}`);
+      const response = await axios.get(`/api/aella/verify/${reference}`);
       if (response.data.status && response.data.data.status === 'success') {
         await updateDoc(doc(db, 'jobRequests', jobRequestId), {
           paymentStatus: 'escrowed'
         });
-        alert("Payment successful! Funds are now held in escrow.");
+        alert("Payment successful via Aella! Funds are now held in escrow.");
       }
     } catch (error) {
       console.error("Payment verification failed:", error);
@@ -5341,7 +5342,7 @@ export default function App() {
                     1. The Escrow Payment System
                   </h3>
                   <p className="text-slate-600 leading-relaxed text-sm">
-                    Sesewa Golding Limited utilizes a secure Escrow system powered by Paystack. When you book a professional, your payment is held securely by our platform. 
+                    Sesewa Golding Limited utilizes a secure Escrow system powered by Aella. When you book a professional, your payment is held securely by our platform. 
                     <strong> Funds are only released to the professional once you confirm the job is completed</strong> to your satisfaction. 
                     This ensures that your money is safe and professionals are motivated to deliver high-quality work.
                   </p>

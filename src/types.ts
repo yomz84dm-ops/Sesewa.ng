@@ -64,7 +64,7 @@ export interface JobRequest {
   invoiceId?: string;
   scheduledDate?: string;
   scheduledTime?: string;
-  paystackReference?: string;
+  aellaReference?: string;
   date: string;
   unlockedBy?: string[]; // List of handyman UIDs who have unlocked this lead
 }
@@ -99,10 +99,43 @@ export interface Notification {
   createdAt: any;
 }
 
+export type HandymanCategory =
+  | 'Plumbing'
+  | 'Electrical'
+  | 'Carpentry'
+  | 'Painting'
+  | 'General Repairs'
+  | 'Mechanic'
+  | 'AC Technician'
+  | 'Tailor'
+  | 'Bricklayer'
+  | 'Cleaning'
+  | 'House Help'
+  | 'Auto Services'
+  | 'Manicure'
+  | 'Pedicure'
+  | 'Hairstylist'
+  | 'Barber'
+  | 'Horticulturist'
+  | 'Tattoo artist'
+  | 'Generator Repair'
+  | 'Inverter Specialist'
+  | 'Borehole Driller'
+  | 'Satellite Installer'
+  | 'Lawyer'
+  | 'Accountant'
+  | 'House Removal'
+  | 'Home Tutor'
+  | 'Shoe Maker'
+  | 'Manicurist'
+  | 'Beauty'
+  | 'Security'
+  | 'Other';
+
 export interface Handyman {
   id: string;
   name: string;
-  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services' | 'Manicure' | 'Pedicure' | 'Hairstylist' | 'Barber' | 'Horticulturist' | 'Tattoo artist' | 'Generator Repair' | 'Satellite Installer' | 'Lawyer' | 'Accountant' | 'House Removal' | 'Home Tutor' | 'Inverter Specialist' | 'Borehole Driller' | 'Shoe Maker';
+  category: HandymanCategory;
   location: string;
   lat: number;
   lng: number;
