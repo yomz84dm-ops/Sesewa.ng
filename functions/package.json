@@ -5,9 +5,9 @@
   "dependencies": {
     "firebase-functions": "^7.2.5",
     "firebase-admin": "^13.8.0",
-    "express": "^4.21.2",
+    "express": "^4.22.3",
     "cors": "^2.8.5",
-    "axios": "^1.16.0",
+    "axios": "^1.20.0",
     "dotenv": "^16.4.7",
     "@google/genai": "^1.29.0"
   },
