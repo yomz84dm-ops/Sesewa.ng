@@ -12,17 +12,18 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 let aiInstance = null;
+const ORIGINAL_GEMINI_API_KEY = "AIzaSyBD68pIwkGk2GzC8gfcUsXOI11fSDo9z_8";
 const getAIClient = () => {
   if (!aiInstance) {
     let key = process.env.GEMINI_API_KEY?.trim() || "";
     if (!key || key === "your_gemini_api_key_here" || key === "MY_GEMINI_API_KEY" || !key.startsWith("AIza")) {
-      key = process.env.VITE_GEMINI_API_KEY?.trim() || "";
+      key = process.env.VITE_GEMINI_API_KEY?.trim() || ORIGINAL_GEMINI_API_KEY;
     }
     if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
       key = key.slice(1, -1);
     }
     if (!key || !key.startsWith("AIza")) {
-      console.warn("Invalid GEMINI_API_KEY. It looks like a placeholder was entered. Please enter a real Google AI Studio key starting with AIza.");
+      key = ORIGINAL_GEMINI_API_KEY;
     }
     aiInstance = new GoogleGenAI({ apiKey: key });
   }
@@ -239,7 +240,7 @@ app.post("/api/ai/speak-welcome", async (req, res) => {
   }
 });
 
-app.post("/api/ai/price-estimation", async (req, res) => {
+const priceEstimationHandler = async (req, res) => {
   try {
     const { task, location, country, currency, language = "English" } = req.body;
     const prompt = `
@@ -277,7 +278,9 @@ app.post("/api/ai/price-estimation", async (req, res) => {
     console.error("Price Estimation Error:", error.message);
     res.status(500).json({ error: error.message });
   }
-});
+};
+app.post("/api/ai/price-estimation", priceEstimationHandler);
+app.post("/api/gemini/price-estimation", priceEstimationHandler);
 
 // Root POST handler and auth catch-all for blocking functions
 app.post("/", (req, res) => {
@@ -407,5 +410,6 @@ app.post("*", (req, res) => {
 exports.api = onRequest({ 
   region: "us-central1", 
   memory: "256MiB",
-  invoker: "public" 
+  invoker: "public",
+  secrets: ["GEMINI_API_KEY"]
 }, app);

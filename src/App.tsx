@@ -1512,7 +1512,7 @@ export default function App() {
     const reference = urlParams.get('reference');
     if (reference && jobRequests.length > 0) {
       const job = jobRequests.find(
-        j => j.aellaReference === reference || j.paystackReference === reference
+        j => j.aellaReference === reference
       );
       if (job && job.paymentStatus === 'pending') {
         handleVerifyPayment(reference, job.id);
@@ -1585,7 +1585,6 @@ export default function App() {
       if (response.data.status) {
         await updateDoc(doc(db, 'jobRequests', jobRequest.id), {
           aellaReference: response.data.data.reference,
-          paystackReference: response.data.data.reference,
           paymentStatus: 'pending',
           amount
         });

@@ -322,7 +322,7 @@ export async function createApi() {
     }
   });
 
-  app.post("/api/ai/price-estimation", async (req, res) => {
+  const priceEstimationHandler = async (req: express.Request, res: express.Response) => {
     try {
       const { task, location, country, currency, language = "English" } = req.body;
       const prompt = `
@@ -360,7 +360,10 @@ export async function createApi() {
       console.error("Price Estimation Error:", error.message);
       res.status(500).json({ error: error.message });
     }
-  });
+  };
+
+  app.post("/api/ai/price-estimation", priceEstimationHandler);
+  app.post("/api/gemini/price-estimation", priceEstimationHandler);
 
   // AELLA Payment Integration
   const AELLA_SECRET = (
@@ -509,9 +512,9 @@ if (process.env.NODE_ENV !== "test") {
       });
     }
 
-    const PORT = 3000;
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+    const port = Number(process.env.PORT) || 3000;
+    app.listen(port, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${port}`);
     });
   }).catch((err) => {
     console.error("Failed to start server:", err);
