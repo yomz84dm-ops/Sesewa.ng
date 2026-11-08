@@ -64,6 +64,7 @@ export interface JobRequest {
   invoiceId?: string;
   scheduledDate?: string;
   scheduledTime?: string;
+  aellaReference?: string;
   paystackReference?: string;
   date: string;
   unlockedBy?: string[]; // List of handyman UIDs who have unlocked this lead

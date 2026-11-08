@@ -75,7 +75,7 @@ export const SimulatedCheckout = ({ plan, onClose, onComplete, lang }: { plan: P
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Checkout</h3>
-                <p className="text-slate-500 text-sm">Secure payment via Paystack</p>
+                <p className="text-slate-500 text-sm">Secure payment via Aella</p>
               </div>
               <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                 <X size={20} />
@@ -132,11 +132,11 @@ export const SimulatedCheckout = ({ plan, onClose, onComplete, lang }: { plan: P
               Pay {plan.price}
             </button>
 
-            <PaystackBankTransferGuide lang={lang} />
+            <AellaBankTransferGuide lang={lang} />
             
             <div className="mt-6 flex items-center justify-center gap-2 text-slate-400 text-xs font-medium">
               <ShieldCheck size={14} className="text-emerald-500" />
-              Secured by Paystack
+              Secured by Aella
             </div>
           </div>
         )}
@@ -627,7 +627,7 @@ export const VoiceWelcome = ({ lang }: { lang: string }) => {
   );
 };
 
-const PaystackBankTransferGuide = ({ lang }: { lang: string }) => {
+const AellaBankTransferGuide = ({ lang }: { lang: string }) => {
   return (
     <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mt-4 text-left">
       <div className="flex items-center gap-2 mb-2">
@@ -636,8 +636,8 @@ const PaystackBankTransferGuide = ({ lang }: { lang: string }) => {
       </div>
       <p className="text-xs text-blue-700 leading-relaxed">
         {lang === 'Pidgin' 
-          ? 'If you wan pay with bank transfer, just select "Transfer" inside Paystack window. E easy well well!'
-          : 'When the Paystack window opens, select "Transfer" to get a temporary bank account number for this payment.'}
+          ? 'If you wan pay with bank transfer, just select "Transfer" inside Aella window. E easy well well!'
+          : 'When the Aella checkout window opens, select "Transfer" to get a temporary bank account number for this payment.'}
       </p>
     </div>
   );

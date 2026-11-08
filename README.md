@@ -7,7 +7,7 @@
 - **Service Discovery**: Browse professionals by category (Plumbing, Electrical, Carpentry, Mechanics, etc.).
 - **Smart Search**: Find pros by name, skill, or location.
 - **Nearby Search**: Use browser geolocation to find the closest service providers.
-- **Escrow Payments**: Secure transactions via Paystack integration. Funds are held in escrow until job completion.
+- **Escrow Payments**: Secure transactions via Aella integration. Funds are held in escrow until job completion.
 - **Dispute Resolution**: Admin-mediated dispute system for user and professional protection.
 - **Professional Verification**: ID document upload and admin vetting workflow for "Verified" badges.
 - **Real-time Chat**: Direct messaging between customers and handymen.
@@ -25,7 +25,7 @@
 - **Animations**: Motion (Framer Motion)
 - **Icons**: Lucide React
 - **Backend**: Firebase (Authentication, Firestore)
-- **Payments**: Paystack API
+- **Payments**: Aella API
 - **State Management**: React Hooks (useState, useEffect, useContext)
 
 ## 📦 Getting Started
@@ -53,7 +53,7 @@
    ```bash
    cp .env.example .env
    ```
-   Fill in your Paystack and Firebase credentials.
+   Fill in your Aella and Firebase credentials.
 
 4. Start the development server:
    ```bash
