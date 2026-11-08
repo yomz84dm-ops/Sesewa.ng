@@ -65,7 +65,6 @@ export interface JobRequest {
   scheduledDate?: string;
   scheduledTime?: string;
   aellaReference?: string;
-  paystackReference?: string;
   date: string;
   unlockedBy?: string[]; // List of handyman UIDs who have unlocked this lead
 }
@@ -103,7 +102,7 @@ export interface Notification {
 export interface Handyman {
   id: string;
   name: string;
-  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services' | 'Manicure' | 'Pedicure' | 'Hairstylist' | 'Barber' | 'Horticulturist' | 'Tattoo artist' | 'Generator Repair' | 'Satellite Installer' | 'Lawyer' | 'Accountant' | 'House Removal' | 'Home Tutor' | 'Inverter Specialist' | 'Borehole Driller' | 'Shoe Maker';
+  category: 'Plumbing' | 'Electrical' | 'Carpentry' | 'Painting' | 'General Repairs' | 'Mechanic' | 'AC Technician' | 'Tailor' | 'Bricklayer' | 'Cleaning' | 'House Help' | 'Auto Services' | 'Manicurist' | 'Beauty' | 'Security' | 'Other';
   location: string;
   lat: number;
   lng: number;
